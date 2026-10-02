@@ -124,4 +124,53 @@ describe('gitAdapter', () => {
       expect(result.output).toContain('Spoon-Knife');
     }
   }, 30000);
+
+  it('should handle concurrent clones of repos with same name', async () => {
+    // Create three local bare repos all named "skills"
+    const bareReposDir = path.join(tempDir, 'bare-repos');
+    fs.mkdirSync(bareReposDir, { recursive: true });
+
+    const repo1 = path.join(bareReposDir, 'a', 'skills.git');
+    const repo2 = path.join(bareReposDir, 'b', 'skills.git');
+    const repo3 = path.join(bareReposDir, 'c', 'skills.git');
+
+    // Initialize three bare repos
+    const { execSync } = await import('child_process');
+    for (const repo of [repo1, repo2, repo3]) {
+      fs.mkdirSync(path.dirname(repo), { recursive: true });
+      execSync(`git init --bare "${repo}"`, { stdio: "ignore" });
+    }
+
+    // Clone all three concurrently (they all resolve to "skills" as repo name)
+    const results = await Promise.all([
+      gitAdapter({
+        source: `file://${repo1}`,
+        workspacePath,
+        config,
+      }),
+      gitAdapter({
+        source: `file://${repo2}`,
+        workspacePath,
+        config,
+      }),
+      gitAdapter({
+        source: `file://${repo3}`,
+        workspacePath,
+        config,
+      }),
+    ]);
+
+    // All three should succeed with unique paths
+    const successCount = results.filter((r) => r.success).length;
+    expect(successCount).toBe(3);
+
+    const outputs = results.filter((r) => r.success).map((r) => r.output);
+    const uniqueOutputs = new Set(outputs);
+    expect(uniqueOutputs.size).toBe(3); // Three different output paths
+
+    // Verify all three repos exist
+    const reposDir = path.join(workspacePath, 'repos');
+    const clonedRepos = fs.readdirSync(reposDir);
+    expect(clonedRepos.length).toBe(3);
+  }, 30000);
 });

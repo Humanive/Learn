@@ -31,9 +31,9 @@ export async function gitAdapter(context: AdapterContext): Promise<AdapterResult
     };
   }
 
-  // Find unique output path
+  // Find unique output path and claim it atomically
   const reposDir = path.join(workspacePath, 'repos');
-  const outputPath = findUniqueRepoPath(reposDir, repoName);
+  const outputPath = await claimUniqueRepoPath(reposDir, repoName);
   const relativePath = path.relative(workspacePath, outputPath);
 
   // Build git clone command
@@ -85,19 +85,35 @@ function extractRepoName(url: string): string | null {
 }
 
 /**
- * Find a unique path for the repository, appending -2, -3, etc. if needed
+ * Find a unique path for the repository, appending -2, -3, etc. if needed,
+ * and atomically create it to claim the path (prevents race conditions).
  */
-function findUniqueRepoPath(reposDir: string, baseName: string): string {
+async function claimUniqueRepoPath(reposDir: string, baseName: string): Promise<string> {
   let candidatePath = path.join(reposDir, baseName);
 
-  if (!fs.existsSync(candidatePath)) {
+  // Try to create the directory atomically
+  try {
+    fs.mkdirSync(candidatePath, { recursive: false });
     return candidatePath;
+  } catch (error: any) {
+    // If EEXIST, someone else claimed it or it already exists
+    if (error.code !== 'EEXIST') {
+      throw error;
+    }
   }
 
+  // Try with suffix -2, -3, etc.
   let suffix = 2;
-  while (fs.existsSync(path.join(reposDir, `${baseName}-${suffix}`))) {
-    suffix++;
+  while (true) {
+    candidatePath = path.join(reposDir, `${baseName}-${suffix}`);
+    try {
+      fs.mkdirSync(candidatePath, { recursive: false });
+      return candidatePath;
+    } catch (error: any) {
+      if (error.code !== 'EEXIST') {
+        throw error;
+      }
+      suffix++;
+    }
   }
-
-  return path.join(reposDir, `${baseName}-${suffix}`);
 }
