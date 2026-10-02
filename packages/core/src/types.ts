@@ -63,6 +63,8 @@ export interface GlobalConfig {
   defaultGitDepth: number | null;
   jinaApiKey: string | null;
   editor: string;
+  /** External coding agent used for failed-resource handoff. */
+  agent?: string;
   features: {
     autoIngest: boolean;
     preserveProvenance: boolean;

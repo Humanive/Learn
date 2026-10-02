@@ -151,6 +151,50 @@ describe('ingestWorkspace', () => {
     });
   });
 
+  describe('agent handoff', () => {
+    it('writes a manifest and records agent output as ingested', async () => {
+      ResourcesManager.addResource(testWorkspace, 'video-123', 'video', ['course']);
+      const runner = async ({ workspacePath, manifestPath, resources }: Parameters<NonNullable<IngestConfig['agentRunner']>>[0]) => {
+        expect(fs.existsSync(manifestPath)).toBe(true);
+        const manifest = fs.readFileSync(manifestPath, 'utf-8');
+        expect(manifest).toContain('video-123');
+        expect(manifest).toContain('video/video-123.md');
+        fs.writeFileSync(path.join(workspacePath, resources[0].expectedOutput), '# Transcript');
+      };
+
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentName: 'test-agent',
+        agentRunner: runner,
+      });
+
+      expect(result.success).toBe(1);
+      expect(result.failed).toBe(0);
+      expect(result.handedOff).toBe(1);
+      const data = ResourcesManager.load(testWorkspace);
+      expect(data.resources[0]).toMatchObject({
+        status: 'ingested',
+        adapter: 'agent:test-agent',
+        output: 'video/video-123.md',
+      });
+      expect(fs.existsSync(path.join(testWorkspace, '.learn', 'failed-resources.md'))).toBe(true);
+    });
+
+    it('keeps the resource failed when the agent times out', async () => {
+      ResourcesManager.addResource(testWorkspace, 'video-456', 'video', []);
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentTimeout: 10,
+        agentRunner: () => new Promise<void>(() => undefined),
+      });
+
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.handedOff).toBe(0);
+      expect(ResourcesManager.load(testWorkspace).resources[0].status).toBe('failed');
+    });
+  });
+
   describe('status updates', () => {
     it('should update status to ingested on success', async () => {
       const testFile = path.join(testWorkspace, 'test.txt');

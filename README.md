@@ -39,8 +39,13 @@ learn add https://arxiv.org/abs/2501.01234
 # List workspaces
 learn list
 
-# Ingest resources (not yet implemented)
+# Ingest resources with deterministic adapters
 learn ingest
+
+# Hand off resources that adapters cannot process to an external coding agent
+learn ingest --agent claude
+learn ingest --agent codex
+learn ingest --agent pi
 
 # Open workspace in editor (not yet implemented)
 learn open

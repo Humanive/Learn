@@ -44,4 +44,5 @@ _Avoid_: manifest, index, state file
 
 **Config**:
 Two-tier configuration: global defaults in `~/.learn/config.json` (default agent, adapter chains, timeouts) and optional per-workspace overrides in the workspace's `resources.json` `config` field.
+The current CLI config file is YAML (`~/.learn/config.yaml`); `agent` selects `claude`, `codex`, or `pi` for failed-resource handoff.
 _Avoid_: settings, preferences
