@@ -5,6 +5,7 @@ import { addCommand } from './commands/add.js';
 import { listCommand } from './commands/list.js';
 import { rmCommand } from './commands/rm.js';
 import { tagCommand } from './commands/tag.js';
+import { ingestCommand } from './commands/ingest.js';
 
 const program = new Command();
 
@@ -18,5 +19,6 @@ program.addCommand(addCommand);
 program.addCommand(listCommand);
 program.addCommand(rmCommand);
 program.addCommand(tagCommand);
+program.addCommand(ingestCommand);
 
 program.parse();
