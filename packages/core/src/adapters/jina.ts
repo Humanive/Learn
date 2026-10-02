@@ -8,14 +8,6 @@ import { AdapterContext, AdapterResult } from './types.js';
 export async function jinaAdapter(context: AdapterContext): Promise<AdapterResult> {
   const { source, workspacePath, config } = context;
 
-  // Check for API key
-  if (!config.jinaApiKey) {
-    return {
-      success: false,
-      reason: 'Jina API key not configured',
-    };
-  }
-
   // Validate URL
   try {
     new URL(source);
@@ -35,12 +27,17 @@ export async function jinaAdapter(context: AdapterContext): Promise<AdapterResul
   // Call Jina Reader API
   const jinaUrl = `https://r.jina.ai/${source}`;
 
+  // Build headers - API key is optional
+  const headers: Record<string, string> = {
+    'X-Return-Format': 'markdown',
+  };
+  if (config.jinaApiKey) {
+    headers['Authorization'] = `Bearer ${config.jinaApiKey}`;
+  }
+
   try {
     const response = await fetch(jinaUrl, {
-      headers: {
-        'Authorization': `Bearer ${config.jinaApiKey}`,
-        'X-Return-Format': 'markdown',
-      },
+      headers,
       signal: AbortSignal.timeout(60000), // 60 second timeout
     });
 

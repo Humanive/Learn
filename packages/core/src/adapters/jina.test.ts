@@ -35,17 +35,24 @@ describe('jinaAdapter', () => {
     }
   });
 
-  it('should handle missing API key', async () => {
+  it('should work without API key (free tier)', async () => {
     const context: AdapterContext = {
-      source: 'https://example.com/article',
+      source: 'https://example.com',
       workspacePath,
       config: { ...config, jinaApiKey: null },
     };
 
     const result = await jinaAdapter(context);
 
-    expect(result.success).toBe(false);
-    expect(result.reason).toContain('API key');
+    // Jina Reader works without API key (free tier)
+    expect(result.success).toBe(true);
+    expect(result.output).toBeDefined();
+    if (result.success) {
+      const outputPath = path.join(workspacePath, result.output!);
+      expect(fs.existsSync(outputPath)).toBe(true);
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      expect(content.length).toBeGreaterThan(0);
+    }
   });
 
   it('should fetch and save webpage content', async () => {
