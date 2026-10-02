@@ -8,19 +8,38 @@ interface TagOptions {
 
 async function action(source: string, tagSpecs: string[], options: TagOptions, command: Command): Promise<void> {
   try {
-    // Commander.js parses -tag as option, so we need to get raw args after source
-    const rawArgs = command.args.slice(1); // Skip source, get the rest
+    // Get raw args to handle -tag patterns that Commander may misinterpret
+    const rawArgs = process.argv.slice(process.argv.indexOf('tag') + 1);
 
-    if (rawArgs.length === 0) {
+    // Extract workspace option if present
+    let workspace = options.workspace;
+    const workspaceIndex = rawArgs.indexOf('-w');
+    const workspaceLongIndex = rawArgs.indexOf('--workspace');
+
+    if (workspaceIndex !== -1 && workspaceIndex + 1 < rawArgs.length) {
+      workspace = rawArgs[workspaceIndex + 1];
+    } else if (workspaceLongIndex !== -1 && workspaceLongIndex + 1 < rawArgs.length) {
+      workspace = rawArgs[workspaceLongIndex + 1];
+    }
+
+    // Filter out source, -w/--workspace and its value from raw args to get tag specs
+    const tagSpecsRaw = rawArgs.filter((arg, i, arr) => {
+      if (arg === source) return false;
+      if (arg === '-w' || arg === '--workspace') return false;
+      if (i > 0 && (arr[i - 1] === '-w' || arr[i - 1] === '--workspace')) return false;
+      return true;
+    });
+
+    if (tagSpecsRaw.length === 0) {
       throw new Error('No tag operations specified. Use +tag to add or -tag to remove');
     }
 
     let workspacePath: string | null = null;
 
-    if (options.workspace) {
-      workspacePath = await workspaceManager.getWorkspacePath(options.workspace);
+    if (workspace) {
+      workspacePath = await workspaceManager.getWorkspacePath(workspace);
       if (!workspaceManager.isWorkspace(workspacePath)) {
-        throw new Error(`Workspace "${options.workspace}" does not exist`);
+        throw new Error(`Workspace "${workspace}" does not exist`);
       }
     } else {
       workspacePath = workspaceManager.getCurrentWorkspace();
@@ -50,7 +69,7 @@ async function action(source: string, tagSpecs: string[], options: TagOptions, c
     const tagsToAdd: string[] = [];
     const tagsToRemove: string[] = [];
 
-    for (const spec of rawArgs) {
+    for (const spec of tagSpecsRaw) {
       if (spec.startsWith('+')) {
         const tag = spec.slice(1);
         if (tag) {
