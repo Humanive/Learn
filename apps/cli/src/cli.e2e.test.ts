@@ -192,4 +192,116 @@ describe('CLI End-to-End: new → add → list', () => {
       expect(error.message).toContain('invalid structure');
     }
   });
+
+  it('should add resource, tag it, remove it with and without purge', () => {
+    const workspaceName = 'test-workspace';
+    const learnDir = path.join(testHome, 'Learn');
+    const workspacePath = path.join(learnDir, workspaceName);
+
+    // Step 1: Create workspace
+    execSync(`node ${cliPath} new ${workspaceName}`, {
+      encoding: 'utf-8',
+      env: { ...process.env, HOME: testHome },
+    });
+
+    // Step 2: Add a resource
+    const addOutput = execSync(
+      `node ${cliPath} add https://example.com/article -t initial -w ${workspaceName}`,
+      {
+        encoding: 'utf-8',
+        env: { ...process.env, HOME: testHome },
+      }
+    );
+    expect(addOutput).toContain('Resource added');
+
+    // Step 3: Tag the resource (add and remove tags)
+    const tagOutput = execSync(
+      `node ${cliPath} tag https://example.com/article -w ${workspaceName} +web +tutorial -initial`,
+      {
+        encoding: 'utf-8',
+        env: { ...process.env, HOME: testHome },
+      }
+    );
+    expect(tagOutput).toContain('Tags updated');
+    expect(tagOutput).toContain('Added: web, tutorial');
+    expect(tagOutput).toContain('Removed: initial');
+
+    // Verify tags were updated
+    let resourcesData = JSON.parse(
+      fs.readFileSync(path.join(workspacePath, 'resources.json'), 'utf-8')
+    );
+    expect(resourcesData.resources[0].tags).toEqual(['web', 'tutorial']);
+
+    // Step 4: Manually simulate an ingested resource with output
+    resourcesData.resources[0].output = 'web/article.md';
+    resourcesData.resources[0].status = 'ingested';
+    fs.writeFileSync(
+      path.join(workspacePath, 'resources.json'),
+      JSON.stringify(resourcesData, null, 2)
+    );
+
+    // Create the output file
+    const outputPath = path.join(workspacePath, 'web', 'article.md');
+    fs.writeFileSync(outputPath, '# Article Content');
+    expect(fs.existsSync(outputPath)).toBe(true);
+
+    // Step 5: Remove resource without --purge (output should be kept)
+    const rmOutput = execSync(
+      `node ${cliPath} rm https://example.com/article -w ${workspaceName}`,
+      {
+        encoding: 'utf-8',
+        env: { ...process.env, HOME: testHome },
+      }
+    );
+    expect(rmOutput).toContain('Resource removed');
+    expect(rmOutput).toContain('Output kept');
+
+    // Verify resource was removed but output file still exists
+    resourcesData = JSON.parse(
+      fs.readFileSync(path.join(workspacePath, 'resources.json'), 'utf-8')
+    );
+    expect(resourcesData.resources).toHaveLength(0);
+    expect(fs.existsSync(outputPath)).toBe(true);
+
+    // Step 6: Add the resource again and test --purge
+    execSync(
+      `node ${cliPath} add https://example.com/article2 -w ${workspaceName}`,
+      {
+        encoding: 'utf-8',
+        env: { ...process.env, HOME: testHome },
+      }
+    );
+
+    // Manually set up output again
+    resourcesData = JSON.parse(
+      fs.readFileSync(path.join(workspacePath, 'resources.json'), 'utf-8')
+    );
+    resourcesData.resources[0].output = 'web/article2.md';
+    resourcesData.resources[0].status = 'ingested';
+    fs.writeFileSync(
+      path.join(workspacePath, 'resources.json'),
+      JSON.stringify(resourcesData, null, 2)
+    );
+
+    const outputPath2 = path.join(workspacePath, 'web', 'article2.md');
+    fs.writeFileSync(outputPath2, '# Article 2 Content');
+
+    // Remove with --purge (output should be deleted)
+    const rmPurgeOutput = execSync(
+      `node ${cliPath} rm https://example.com/article2 -w ${workspaceName} --purge`,
+      {
+        encoding: 'utf-8',
+        env: { ...process.env, HOME: testHome },
+      }
+    );
+    expect(rmPurgeOutput).toContain('Resource removed');
+    expect(rmPurgeOutput).toContain('Deleted file');
+
+    // Verify both resource and output were removed
+    resourcesData = JSON.parse(
+      fs.readFileSync(path.join(workspacePath, 'resources.json'), 'utf-8')
+    );
+    expect(resourcesData.resources).toHaveLength(0);
+    expect(fs.existsSync(outputPath2)).toBe(false);
+  });
 });

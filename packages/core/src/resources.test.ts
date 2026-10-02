@@ -275,4 +275,208 @@ describe('ResourcesManager', () => {
       expect(content).toContain('  ');
     });
   });
+
+  describe('removeResource', () => {
+    beforeEach(() => {
+      ResourcesManager.initialize(workspacePath);
+    });
+
+    it('should remove a resource by source', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        ['test']
+      );
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example2.com',
+        'web',
+        ['test']
+      );
+
+      ResourcesManager.removeResource(workspacePath, 'https://example.com');
+
+      const data = ResourcesManager.load(workspacePath);
+      expect(data.resources).toHaveLength(1);
+      expect(data.resources[0].source).toBe('https://example2.com');
+    });
+
+    it('should throw if source does not exist', () => {
+      expect(() =>
+        ResourcesManager.removeResource(workspacePath, 'https://nonexistent.com')
+      ).toThrow('Resource "https://nonexistent.com" not found');
+    });
+
+    it('should return the output path if resource had one', () => {
+      // Manually add resource with output
+      const data: ResourcesFile = {
+        version: 1,
+        resources: [
+          {
+            source: 'https://example.com',
+            type: 'web',
+            tags: [],
+            status: 'ingested',
+            output: 'web/example.md',
+          },
+        ],
+      };
+      ResourcesManager.save(workspacePath, data);
+
+      const outputPath = ResourcesManager.removeResource(
+        workspacePath,
+        'https://example.com'
+      );
+
+      expect(outputPath).toBe('web/example.md');
+    });
+
+    it('should return undefined if resource had no output', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        []
+      );
+
+      const outputPath = ResourcesManager.removeResource(
+        workspacePath,
+        'https://example.com'
+      );
+
+      expect(outputPath).toBeUndefined();
+    });
+  });
+
+  describe('updateTags', () => {
+    beforeEach(() => {
+      ResourcesManager.initialize(workspacePath);
+    });
+
+    it('should add new tags to a resource', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        ['tag1']
+      );
+
+      ResourcesManager.updateTags(
+        workspacePath,
+        'https://example.com',
+        ['tag2', 'tag3'],
+        []
+      );
+
+      const data = ResourcesManager.load(workspacePath);
+      expect(data.resources[0].tags).toEqual(['tag1', 'tag2', 'tag3']);
+    });
+
+    it('should remove tags from a resource', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        ['tag1', 'tag2', 'tag3']
+      );
+
+      ResourcesManager.updateTags(
+        workspacePath,
+        'https://example.com',
+        [],
+        ['tag2']
+      );
+
+      const data = ResourcesManager.load(workspacePath);
+      expect(data.resources[0].tags).toEqual(['tag1', 'tag3']);
+    });
+
+    it('should add and remove tags in the same operation', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        ['old1', 'old2']
+      );
+
+      ResourcesManager.updateTags(
+        workspacePath,
+        'https://example.com',
+        ['new1', 'new2'],
+        ['old1']
+      );
+
+      const data = ResourcesManager.load(workspacePath);
+      expect(data.resources[0].tags).toEqual(['old2', 'new1', 'new2']);
+    });
+
+    it('should not add duplicate tags', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        ['tag1']
+      );
+
+      ResourcesManager.updateTags(
+        workspacePath,
+        'https://example.com',
+        ['tag1', 'tag2'],
+        []
+      );
+
+      const data = ResourcesManager.load(workspacePath);
+      expect(data.resources[0].tags).toEqual(['tag1', 'tag2']);
+    });
+
+    it('should silently ignore removing non-existent tags', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        ['tag1']
+      );
+
+      ResourcesManager.updateTags(
+        workspacePath,
+        'https://example.com',
+        [],
+        ['nonexistent']
+      );
+
+      const data = ResourcesManager.load(workspacePath);
+      expect(data.resources[0].tags).toEqual(['tag1']);
+    });
+
+    it('should throw if source does not exist', () => {
+      expect(() =>
+        ResourcesManager.updateTags(
+          workspacePath,
+          'https://nonexistent.com',
+          ['tag1'],
+          []
+        )
+      ).toThrow('Resource "https://nonexistent.com" not found');
+    });
+
+    it('should handle empty tag operations', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com',
+        'web',
+        ['tag1']
+      );
+
+      ResourcesManager.updateTags(
+        workspacePath,
+        'https://example.com',
+        [],
+        []
+      );
+
+      const data = ResourcesManager.load(workspacePath);
+      expect(data.resources[0].tags).toEqual(['tag1']);
+    });
+  });
 });

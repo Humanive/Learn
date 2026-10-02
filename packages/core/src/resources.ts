@@ -98,6 +98,58 @@ export class ResourcesManager {
   }
 
   /**
+   * Remove a resource from resources.json
+   * Returns the output path if the resource had one, undefined otherwise
+   */
+  static removeResource(workspacePath: string, source: string): string | undefined {
+    const data = ResourcesManager.load(workspacePath);
+
+    const index = data.resources.findIndex((r) => r.source === source);
+    if (index === -1) {
+      throw new Error(`Resource "${source}" not found`);
+    }
+
+    const removed = data.resources[index];
+    data.resources.splice(index, 1);
+    ResourcesManager.save(workspacePath, data);
+
+    return removed.output;
+  }
+
+  /**
+   * Update tags on a resource
+   * @param workspacePath Path to the workspace
+   * @param source Source identifier of the resource
+   * @param tagsToAdd Tags to add (duplicates are ignored)
+   * @param tagsToRemove Tags to remove (non-existent tags are silently ignored)
+   */
+  static updateTags(
+    workspacePath: string,
+    source: string,
+    tagsToAdd: string[],
+    tagsToRemove: string[]
+  ): void {
+    const data = ResourcesManager.load(workspacePath);
+
+    const resource = data.resources.find((r) => r.source === source);
+    if (!resource) {
+      throw new Error(`Resource "${source}" not found`);
+    }
+
+    // Remove tags
+    resource.tags = resource.tags.filter((tag) => !tagsToRemove.includes(tag));
+
+    // Add new tags (avoid duplicates)
+    for (const tag of tagsToAdd) {
+      if (!resource.tags.includes(tag)) {
+        resource.tags.push(tag);
+      }
+    }
+
+    ResourcesManager.save(workspacePath, data);
+  }
+
+  /**
    * Type guard to validate ResourcesFile structure
    */
   private static isValidResourcesFile(data: unknown): data is ResourcesFile {
