@@ -1,0 +1,31 @@
+{
+  "name": "@learn/cli",
+  "version": "0.1.0",
+  "description": "CLI tool for building project-centric learning workspaces",
+  "type": "module",
+  "bin": {
+    "learn": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest --watch"
+  },
+  "keywords": [
+    "learning",
+    "workspace",
+    "cli"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3",
+    "vitest": "1.6.1"
+  },
+  "dependencies": {
+    "@learn/core": "workspace:*",
+    "chalk": "5.6.2",
+    "commander": "11.1.0"
+  }
+}

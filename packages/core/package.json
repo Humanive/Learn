@@ -1,0 +1,33 @@
+{
+  "name": "@learn/core",
+  "version": "0.1.0",
+  "description": "Shared core logic for Learn workspace system",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./config": "./dist/config.js",
+    "./workspace": "./dist/workspace.js",
+    "./sources": "./dist/sources.js",
+    "./ingest": "./dist/ingest/router.js",
+    "./types": "./dist/types.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest --watch"
+  },
+  "keywords": ["learning", "workspace", "knowledge-management"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3",
+    "vitest": "1.6.1"
+  },
+  "dependencies": {
+    "js-yaml": "4.3.2"
+  }
+}
