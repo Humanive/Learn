@@ -47,6 +47,14 @@ describe('learn CLI', () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('already exists');
     });
+
+    it.each(['list', 'help'])('rejects the reserved workspace name %s', (name) => {
+      const result = run(['new', name]);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('reserved');
+      expect(fs.existsSync(workspaceDir(name))).toBe(false);
+    });
   });
 
   describe('add', () => {
@@ -149,6 +157,18 @@ describe('learn CLI', () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('browser-agents');
       expect(result.stdout).toContain('Resources: 1 (1 pending)');
+    });
+
+    it('does not expand individual resources', () => {
+      run(['new', 'browser-agents']);
+      run(['add', 'https://example.com/article', '--title', 'Example article']);
+
+      const result = run(['list']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Resources: 1 (1 pending)');
+      expect(result.stdout).not.toContain('https://example.com/article');
+      expect(result.stdout).not.toContain('Example article');
     });
   });
 
@@ -387,6 +407,270 @@ describe('learn CLI', () => {
       const result = run(['tag', 'https://example.com', '+tag']);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('Multiple workspaces found');
+    });
+  });
+
+  describe('workspace-scoped list', () => {
+    const localSource = () => path.join(home, 'notes');
+
+    const writeResources = (workspace: string, resources: unknown[]) => {
+      fs.writeFileSync(
+        path.join(workspaceDir(workspace), 'resources.json'),
+        JSON.stringify({ version: 1, resources }, null, 2)
+      );
+    };
+
+    // Deliberate insertion order: titled+ingested repo, pending webpage,
+    // failed local folder, ingested PDF.
+    const seedVibeCoding = () => {
+      run(['new', 'vibe-coding']);
+      writeResources('vibe-coding', [
+        {
+          source: 'https://github.com/emilkowalski/skills',
+          type: 'repos',
+          tags: ['agents'],
+          status: 'ingested',
+          adapter: 'git',
+          output: 'repos/skills',
+          title: 'Agent skills',
+          addedAt: '2026-01-02T00:00:00.000Z',
+          ingestedAt: '2026-01-03T00:00:00.000Z',
+        },
+        {
+          source: 'https://example.com/article',
+          type: 'web',
+          tags: ['frontend'],
+          status: 'pending',
+          addedAt: '2026-01-04T00:00:00.000Z',
+        },
+        {
+          source: localSource(),
+          type: 'local',
+          tags: ['notes', 'frontend'],
+          status: 'failed',
+          addedAt: '2026-01-05T00:00:00.000Z',
+        },
+        {
+          source: 'https://example.com/paper.pdf',
+          type: 'pdf',
+          tags: ['frontend'],
+          status: 'ingested',
+          output: 'pdf/paper.md',
+          addedAt: '2026-01-06T00:00:00.000Z',
+        },
+      ]);
+    };
+
+    it('lists the resources of one workspace in insertion order', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'list']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Resources in vibe-coding (4)');
+
+      const repos = result.stdout.indexOf('https://github.com/emilkowalski/skills');
+      const article = result.stdout.indexOf('https://example.com/article');
+      const local = result.stdout.indexOf(localSource());
+      const paper = result.stdout.indexOf('https://example.com/paper.pdf');
+      expect(repos).toBeGreaterThan(-1);
+      expect(repos).toBeLessThan(article);
+      expect(article).toBeLessThan(local);
+      expect(local).toBeLessThan(paper);
+    });
+
+    it('shows status, type, provenance, and workspace-relative output', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'list']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('[ingested] Agent skills  repos');
+      expect(result.stdout).toContain('URL:      https://github.com/emilkowalski/skills');
+      expect(result.stdout).toContain('Output:   repos/skills');
+      expect(result.stdout).toContain('[pending] https://example.com/article  web');
+      expect(result.stdout).toContain('[failed]');
+      expect(result.stdout).toContain(`Path:     ${localSource()}`);
+      // No absolute workspace prefix in the compact output
+      expect(result.stdout).not.toContain(path.join(workspaceDir('vibe-coding'), 'repos', 'skills'));
+    });
+
+    it('treats ls as an alias for the scoped list', () => {
+      seedVibeCoding();
+      const list = run(['vibe-coding', 'list']);
+      const ls = run(['vibe-coding', 'ls']);
+
+      expect(ls.status).toBe(0);
+      expect(ls.stdout).toBe(list.stdout);
+    });
+
+    it('includes the workspace prefix in scoped help', () => {
+      const result = run(['vibe-coding', 'list', '--help']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Usage: learn vibe-coding list');
+      expect(result.stdout).toContain('--status');
+      expect(result.stdout).toContain('--type');
+      expect(result.stdout).toContain('--tag');
+    });
+
+    it('requires a subcommand instead of implicitly listing resources', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding']);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain('Usage: learn vibe-coding');
+      expect(result.stdout + result.stderr).not.toContain('Agent skills');
+    });
+
+    it('adds metadata and absolute paths with --verbose', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--verbose']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(workspaceDir('vibe-coding'));
+      expect(result.stdout).toContain(`Output:   ${path.join(workspaceDir('vibe-coding'), 'repos', 'skills')}`);
+      expect(result.stdout).toContain('Adapter:  git');
+      expect(result.stdout).toContain('Ingested: 2026-01-03T00:00:00.000Z');
+      expect(result.stdout).toContain('Tags:     agents');
+      expect(result.stdout).toContain('Tags:     notes, frontend');
+    });
+
+    it('filters by status', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--status', 'ingested']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Resources in vibe-coding (2)');
+      expect(result.stdout).toContain('https://github.com/emilkowalski/skills');
+      expect(result.stdout).toContain('https://example.com/paper.pdf');
+      expect(result.stdout).not.toContain('https://example.com/article');
+    });
+
+    it('filters by type', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--type', 'repos']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Resources in vibe-coding (1)');
+      expect(result.stdout).toContain('https://github.com/emilkowalski/skills');
+    });
+
+    it('filters by exact tag', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--tag', 'frontend']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Resources in vibe-coding (3)');
+      expect(result.stdout).not.toContain('https://github.com/emilkowalski/skills');
+    });
+
+    it('does not match tags by prefix or case', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--tag', 'Front']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('No resources in "vibe-coding" match');
+    });
+
+    it('combines filters with AND semantics', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--type', 'pdf', '--tag', 'agents']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('No resources in "vibe-coding" match');
+    });
+
+    it('uses OR semantics for repeated values in one dimension', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--status', 'pending', '--status', 'failed']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Resources in vibe-coding (2)');
+      expect(result.stdout).toContain('https://example.com/article');
+      expect(result.stdout).toContain(localSource());
+      expect(result.stdout).not.toContain('https://example.com/paper.pdf');
+    });
+
+    it('does not modify resources.json while filtering', () => {
+      seedVibeCoding();
+      const before = fs.readFileSync(path.join(workspaceDir('vibe-coding'), 'resources.json'), 'utf-8');
+
+      run(['vibe-coding', 'ls', '--status', 'pending']);
+
+      const after = fs.readFileSync(path.join(workspaceDir('vibe-coding'), 'resources.json'), 'utf-8');
+      expect(after).toBe(before);
+    });
+
+    it('prints workspace context and resources as JSON', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--json']);
+
+      expect(result.status).toBe(0);
+      const payload = JSON.parse(result.stdout);
+      expect(payload.workspace).toBe('vibe-coding');
+      expect(payload.path).toBe(workspaceDir('vibe-coding'));
+      expect(payload.resources).toHaveLength(4);
+      expect(payload.resources[0]).toEqual({
+        source: 'https://github.com/emilkowalski/skills',
+        type: 'repos',
+        tags: ['agents'],
+        status: 'ingested',
+        adapter: 'git',
+        output: 'repos/skills',
+        title: 'Agent skills',
+        addedAt: '2026-01-02T00:00:00.000Z',
+        ingestedAt: '2026-01-03T00:00:00.000Z',
+      });
+    });
+
+    it('reflects filters in the JSON resources array', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--json', '--type', 'web']);
+
+      expect(result.status).toBe(0);
+      const payload = JSON.parse(result.stdout);
+      expect(payload.resources).toHaveLength(1);
+      expect(payload.resources[0].source).toBe('https://example.com/article');
+    });
+
+    it('reports an empty workspace clearly', () => {
+      run(['new', 'empty-workspace']);
+      const result = run(['empty-workspace', 'ls']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('No resources in workspace "empty-workspace"');
+    });
+
+    it('reports a filter that matches nothing clearly', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--status', 'pending', '--tag', 'agents']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('No resources in "vibe-coding" match --status pending --tag agents');
+    });
+
+    it('rejects an invalid --status value', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--status', 'done']);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Invalid --status value "done"');
+    });
+
+    it('rejects an invalid --type value', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding', 'ls', '--type', 'github_repo']);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Invalid --type value "github_repo"');
+    });
+
+    it('reports an unknown workspace with an actionable error', () => {
+      run(['new', 'vibe-coding']);
+      const result = run(['nope', 'ls']);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Workspace "nope" does not exist');
+      expect(result.stderr).toContain('learn list');
     });
   });
 });

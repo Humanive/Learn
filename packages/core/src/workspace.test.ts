@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { WorkspaceManager } from './workspace.js';
+import { WorkspaceManager, RESERVED_WORKSPACE_NAMES } from './workspace.js';
 import { ResourcesManager } from './resources.js';
 
 describe('WorkspaceManager', () => {
@@ -48,6 +48,13 @@ describe('WorkspaceManager', () => {
     await expect(workspaceManager.create('test-workspace')).rejects.toThrow(
       'already exists'
     );
+  });
+
+  it('should reject names reserved for top-level commands', async () => {
+    for (const name of RESERVED_WORKSPACE_NAMES) {
+      await expect(workspaceManager.create(name)).rejects.toThrow('is reserved');
+      expect(fs.existsSync(path.join(testDir, 'Learn', name))).toBe(false);
+    }
   });
 
   it('should list all workspaces', async () => {

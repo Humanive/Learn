@@ -1,5 +1,5 @@
 export { ConfigManager, configManager } from './config.js';
-export { WorkspaceManager, workspaceManager } from './workspace.js';
+export { WorkspaceManager, workspaceManager, RESERVED_WORKSPACE_NAMES } from './workspace.js';
 export { SourcesManager, sourcesManager } from './sources.js';
 export { ResourcesManager } from './resources.js';
 export { IngestRouter, ingestRouter } from './ingest/router.js';

@@ -48,6 +48,6 @@ async function action(options: ListOptions): Promise<void> {
 
 export const listCommand = new Command('list')
   .alias('ls')
-  .description('List all learning workspaces')
+  .description('List learning workspaces (use `learn <workspace> list` to list one workspace\'s resources)')
   .option('--json', 'print workspace names as JSON')
   .action(action);
