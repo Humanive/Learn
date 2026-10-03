@@ -3,9 +3,18 @@ import { workspaceManager, ResourcesManager } from '@learn/core';
 import * as path from 'path';
 import chalk from 'chalk';
 
-async function action(): Promise<void> {
+interface ListOptions {
+  json?: boolean;
+}
+
+async function action(options: ListOptions): Promise<void> {
   try {
     const workspaces = await workspaceManager.list();
+
+    if (options.json) {
+      console.log(JSON.stringify(workspaces));
+      return;
+    }
 
     if (workspaces.length === 0) {
       console.log(chalk.yellow('No workspaces found.'));
@@ -40,4 +49,5 @@ async function action(): Promise<void> {
 export const listCommand = new Command('list')
   .alias('ls')
   .description('List all learning workspaces')
+  .option('--json', 'print workspace names as JSON')
   .action(action);

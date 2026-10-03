@@ -39,6 +39,10 @@ learn add https://arxiv.org/abs/2501.01234
 # List workspaces
 learn list
 
+# Save the current browser URL from Raycast
+# Install and run the extension from apps/raycast with: pnpm develop
+# The first capture asks for a workspace; later captures reuse it.
+
 # Ingest resources with deterministic adapters
 learn ingest
 

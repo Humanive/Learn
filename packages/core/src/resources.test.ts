@@ -167,6 +167,22 @@ describe('ResourcesManager', () => {
       expect(data.resources[0].addedAt).toBeDefined();
     });
 
+    it('should preserve an optional title', () => {
+      ResourcesManager.addResource(
+        workspacePath,
+        'https://example.com/article',
+        'web',
+        [],
+        'Article title'
+      );
+
+      expect(ResourcesManager.load(workspacePath).resources[0]).toMatchObject({
+        source: 'https://example.com/article',
+        title: 'Article title',
+        status: 'pending',
+      });
+    });
+
     it('should reject duplicate source', () => {
       ResourcesManager.addResource(
         workspacePath,

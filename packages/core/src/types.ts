@@ -13,6 +13,7 @@ export interface ResourceEntry {
   status: ResourceStatus;
   adapter?: string;
   output?: string;
+  title?: string;
   addedAt?: string;
   ingestedAt?: string;
 }

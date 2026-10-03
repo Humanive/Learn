@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@12.6.0",
   "scripts": {
-    "build": "pnpm -r --filter @learn/core --filter @learn/cli build",
+    "build": "pnpm -r --filter @learn/core --filter @learn/cli build && pnpm --filter @learn/raycast build",
     "test": "pnpm build && pnpm -r test",
     "learn": "node apps/cli/dist/cli.js"
   }

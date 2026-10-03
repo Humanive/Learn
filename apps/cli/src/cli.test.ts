@@ -82,6 +82,17 @@ describe('learn CLI', () => {
       expect(result.stderr).toContain('Multiple workspaces found');
     });
 
+    it('stores an optional title with the resource', () => {
+      run(['new', 'browser-agents']);
+      const result = run(['add', 'https://example.com/article', '--title', 'Article title']);
+
+      expect(result.status).toBe(0);
+      const resourcesFile = JSON.parse(
+        fs.readFileSync(path.join(workspaceDir('browser-agents'), 'resources.json'), 'utf-8')
+      );
+      expect(resourcesFile.resources[0].title).toBe('Article title');
+    });
+
     it('targets the workspace given by --workspace', () => {
       run(['new', 'a']);
       run(['new', 'b']);
@@ -119,6 +130,16 @@ describe('learn CLI', () => {
       const result = run(['list']);
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('No workspaces found');
+    });
+
+    it('prints workspace names as JSON', () => {
+      run(['new', 'browser-agents']);
+      run(['new', 'papers']);
+
+      const result = run(['list', '--json']);
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual(['browser-agents', 'papers']);
     });
 
     it('lists workspaces with resource counts', () => {

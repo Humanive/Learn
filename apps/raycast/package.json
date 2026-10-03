@@ -1,0 +1,59 @@
+{
+  "name": "@learn/raycast",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Raycast capture interface for Learn",
+  "author": "Humanive",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "ray build",
+    "develop": "ray develop",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@raycast/api": "2.6.2",
+    "@raycast/utils": "2.3.2",
+    "react": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/react": "19.0.10",
+    "typescript": "5.9.3",
+    "vitest": "1.6.1"
+  },
+  "title": "Learn",
+  "icon": "assets/icon.png",
+  "platforms": [
+    "macOS"
+  ],
+  "categories": [
+    "Productivity"
+  ],
+  "commands": [
+    {
+      "name": "save-current-browser-url",
+      "title": "Save Current Browser URL",
+      "description": "Save the active browser tab to the selected Learn workspace",
+      "mode": "view"
+    },
+    {
+      "name": "choose-workspace",
+      "title": "Choose Learn Workspace",
+      "description": "Choose the workspace used by browser capture",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "learnExecutable",
+      "title": "Learn Executable",
+      "description": "Optional path to the learn executable when it is not on Raycast's PATH",
+      "type": "textfield",
+      "required": false,
+      "default": "learn"
+    }
+  ]
+}

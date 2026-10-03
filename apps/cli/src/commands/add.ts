@@ -5,6 +5,7 @@ import chalk from 'chalk';
 interface AddOptions {
   tags?: string;
   workspace?: string;
+  title?: string;
 }
 
 async function action(source: string, options: AddOptions): Promise<void> {
@@ -45,7 +46,7 @@ async function action(source: string, options: AddOptions): Promise<void> {
     const type = ingestRouter.detectType(source);
     console.log(chalk.gray(`Detected type: ${chalk.cyan(type)}`));
 
-    ResourcesManager.addResource(workspacePath, source, type, tags);
+    ResourcesManager.addResource(workspacePath, source, type, tags, options.title);
 
     console.log(chalk.green('✓ Resource added to workspace'));
   } catch (error) {
@@ -62,4 +63,5 @@ export const addCommand = new Command('add')
   .argument('<source>', 'URL, file path, or repository')
   .option('-t, --tags <tags>', 'comma-separated tags')
   .option('-w, --workspace <name>', 'target workspace')
+  .option('--title <title>', 'optional resource title')
   .action(action);

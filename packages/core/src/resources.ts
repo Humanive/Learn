@@ -65,7 +65,8 @@ export class ResourcesManager {
     workspacePath: string,
     source: string,
     type: ResourceType,
-    tags: string[]
+    tags: string[],
+    title?: string
   ): void {
     const data = ResourcesManager.load(workspacePath);
 
@@ -80,6 +81,7 @@ export class ResourcesManager {
       tags,
       status: 'pending',
       addedAt: new Date().toISOString(),
+      ...(title ? { title } : {}),
     };
 
     data.resources.push(newResource);
@@ -199,6 +201,7 @@ export class ResourcesManager {
     // Optional fields
     if (obj.adapter !== undefined && typeof obj.adapter !== 'string') return false;
     if (obj.output !== undefined && typeof obj.output !== 'string') return false;
+    if (obj.title !== undefined && typeof obj.title !== 'string') return false;
     if (obj.addedAt !== undefined && typeof obj.addedAt !== 'string') return false;
     if (obj.ingestedAt !== undefined && typeof obj.ingestedAt !== 'string') return false;
 
