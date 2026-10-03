@@ -44,7 +44,7 @@
       "name": "save-current-browser-url",
       "title": "Save Current Browser URL",
       "description": "Save the active browser tab to the selected Learn workspace",
-      "mode": "view"
+      "mode": "no-view"
     },
     {
       "name": "choose-workspace",

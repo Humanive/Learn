@@ -23,10 +23,13 @@ export interface LearnCommandResult {
   code: number;
 }
 
-export interface BrowserCaptureDependencies {
+export interface BrowserCaptureRequest {
   url: string;
   title?: string;
   workspace: string;
+}
+
+export interface BrowserCaptureDependencies extends BrowserCaptureRequest {
   runLearn: (args: string[]) => Promise<LearnCommandResult>;
 }
 
