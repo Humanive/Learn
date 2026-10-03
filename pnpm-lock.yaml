@@ -168,7 +168,7 @@ importers:
 
   apps/cli:
     dependencies:
-      '@learn/core':
+      '@humanive/learn-core':
         specifier: workspace:*
         version: link:../../packages/core
       chalk:

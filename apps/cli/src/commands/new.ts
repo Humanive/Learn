@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { workspaceManager } from '@learn/core';
+import { workspaceManager } from '@humanive/learn-core';
 import chalk from 'chalk';
 
 async function action(name: string): Promise<void> {

@@ -1,8 +1,26 @@
 {
-  "name": "@learn/cli",
+  "name": "@humanive/learn-cli",
   "version": "0.1.0",
   "description": "CLI tool for building project-centric learning workspaces",
+  "keywords": ["learning", "workspace", "cli"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Humanive/Learn.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://github.com/Humanive/Learn#readme",
+  "bugs": {
+    "url": "https://github.com/Humanive/Learn/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "files": ["dist", "README.md"],
   "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "bin": {
     "learn": "dist/cli.js"
   },
@@ -12,11 +30,6 @@
     "test": "vitest run",
     "test:watch": "vitest --watch"
   },
-  "keywords": [
-    "learning",
-    "workspace",
-    "cli"
-  ],
   "license": "MIT",
   "devDependencies": {
     "@types/node": "20.19.43",
@@ -24,7 +37,7 @@
     "vitest": "1.6.1"
   },
   "dependencies": {
-    "@learn/core": "workspace:*",
+    "@humanive/learn-core": "workspace:*",
     "chalk": "5.6.2",
     "commander": "11.1.0"
   }

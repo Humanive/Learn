@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { workspaceManager, ResourcesManager, ingestRouter } from '@learn/core';
+import { workspaceManager, ResourcesManager, ingestRouter } from '@humanive/learn-core';
 import chalk from 'chalk';
 
 interface AddOptions {
