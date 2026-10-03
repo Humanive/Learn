@@ -29,6 +29,8 @@ export interface AgentHandoff {
   workspacePath: string;
   manifestPath: string;
   resources: AgentHandoffResource[];
+  /** Runners must stop their work when the handoff is cancelled. */
+  signal?: AbortSignal;
 }
 
 export type AgentRunner = (handoff: AgentHandoff) => Promise<void>;
@@ -57,12 +59,18 @@ export async function ingestWorkspace(
 ): Promise<IngestResult> {
   const data = ResourcesManager.load(workspacePath);
   const pendingResources = data.resources.filter((r) => r.status === 'pending');
-  const failedForHandoff: AgentHandoffResource[] = [];
+  const failedForHandoff: AgentHandoffResource[] = config.agentRunner
+    ? data.resources.filter((r) => r.status === 'failed').map(resource => ({
+      resource,
+      failures: ['Previously failed deterministic ingestion'],
+      expectedOutput: expectedOutputPath(resource),
+    }))
+    : [];
 
   const result: IngestResult = {
     success: 0,
     failed: 0,
-    skipped: data.resources.length - pendingResources.length,
+    skipped: data.resources.length - pendingResources.length - failedForHandoff.length,
     handedOff: 0,
   };
 
@@ -80,25 +88,36 @@ export async function ingestWorkspace(
   );
 
   if (failedForHandoff.length > 0) {
+    const reservedOutputs = new Set(data.resources.flatMap(resource => resource.output ? [resource.output] : []));
+    for (const item of failedForHandoff) {
+      item.expectedOutput = availableOutputPath(workspacePath, item.expectedOutput, reservedOutputs);
+      reservedOutputs.add(item.expectedOutput);
+    }
+    const controller = new AbortController();
     const handoff: AgentHandoff = {
       workspacePath,
       manifestPath: writeHandoffManifest(workspacePath, failedForHandoff),
       resources: failedForHandoff,
+      signal: controller.signal,
     };
 
     if (config.agentRunner) {
+      let completed = false;
       try {
         await withTimeout(
           Promise.resolve().then(() => config.agentRunner!(handoff)),
-          config.agentTimeout
+          config.agentTimeout,
+          () => controller.abort()
         );
+        completed = true;
       } catch (error) {
+        controller.abort();
         console.warn(
           `Agent handoff failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
 
-      for (const item of failedForHandoff) {
+      for (const item of completed ? failedForHandoff : []) {
         if (!hasOutput(workspacePath, item.expectedOutput)) {
           continue;
         }
@@ -190,6 +209,11 @@ function writeHandoffManifest(
       `## ${index + 1}. ${item.resource.source}`,
       '',
       `- Type: ${item.resource.type}`,
+      ...(!/^https?:\/\//i.test(item.resource.source) && (item.resource.type === 'local' || item.resource.type === 'pdf')
+        ? [`- Input path: ${path.resolve(item.resource.source.startsWith('~/')
+          ? path.join(process.env.HOME || '', item.resource.source.slice(2))
+          : item.resource.source)}`]
+        : []),
       `- Tags: ${item.resource.tags.length > 0 ? item.resource.tags.join(', ') : '(none)'}`,
       `- Expected output: ${item.expectedOutput}`,
       '- Adapter failures:',
@@ -241,21 +265,52 @@ function sanitize(value: string): string {
     .replace(/^-|-$/g, '') || 'document';
 }
 
+function availableOutputPath(workspacePath: string, expectedOutput: string, reserved: Set<string>): string {
+  const extension = path.extname(expectedOutput);
+  const base = expectedOutput.slice(0, expectedOutput.length - extension.length);
+  let candidate = expectedOutput;
+  let suffix = 2;
+  while (reserved.has(candidate) || outputPathExists(path.join(workspacePath, candidate))) {
+    candidate = `${base}-${suffix++}${extension}`;
+  }
+  return candidate;
+}
+
+function outputPathExists(outputPath: string): boolean {
+  try {
+    fs.lstatSync(outputPath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 function hasOutput(workspacePath: string, relativePath: string): boolean {
   try {
-    return fs.existsSync(path.join(workspacePath, relativePath));
+    const output = fs.statSync(path.join(workspacePath, relativePath));
+    if (relativePath.startsWith('repos/')) {
+      return output.isDirectory() && fs.readdirSync(path.join(workspacePath, relativePath)).length > 0;
+    }
+    if (relativePath.startsWith('local/')) {
+      return output.isDirectory() || (output.isFile() && output.size > 0);
+    }
+    return output.isFile() && output.size > 0;
   } catch {
     return false;
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => void): Promise<T> {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return promise;
   }
 
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs);
+    const timer = setTimeout(() => {
+      reject(new Error(`timed out after ${timeoutMs}ms`));
+      onTimeout();
+    }, timeoutMs);
     promise.then(
       (value) => {
         clearTimeout(timer);

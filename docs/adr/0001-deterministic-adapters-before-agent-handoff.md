@@ -9,4 +9,6 @@
 
 ## Consequences
 
-- The agent must record its results through the same entry point as adapters (`learn ingest <source> --from <file>`), so provenance in `state.json` stays complete; files dropped into the workspace without that call don't count as ingested.
+- The CLI writes `.learn/failed-resources.md` with unique expected output paths and invokes the chosen agent once for the failed resources. Previously failed resources can be retried with `learn ingest --agent <name>`.
+- Agents write content files only. After a successful agent exit, the CLI verifies nonempty document files or populated repository directories at the expected paths and records provenance in `resources.json`.
+- Timeout, interruption, or agent failure leaves resources failed. Existing output paths are excluded from allocation so they cannot be overwritten or mistaken for newly ingested content.

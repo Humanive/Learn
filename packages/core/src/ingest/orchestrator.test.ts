@@ -180,6 +180,133 @@ describe('ingestWorkspace', () => {
       expect(fs.existsSync(path.join(testWorkspace, '.learn', 'failed-resources.md'))).toBe(true);
     });
 
+    it('assigns distinct outputs to URLs with the same pathname', async () => {
+      const sources = ['https://www.youtube.com/watch?v=first', 'https://www.youtube.com/watch?v=second'];
+      for (const source of sources) {
+        ResourcesManager.addResource(testWorkspace, source, 'video', []);
+      }
+
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentRunner: async ({ workspacePath, resources }) => {
+          expect(new Set(resources.map(resource => resource.expectedOutput)).size).toBe(2);
+          for (const resource of resources) {
+            fs.writeFileSync(path.join(workspacePath, resource.expectedOutput), resource.resource.source);
+          }
+        },
+      });
+
+      expect(result.success).toBe(2);
+      const data = ResourcesManager.load(testWorkspace);
+      expect(new Set(data.resources.map(resource => resource.output)).size).toBe(2);
+      for (const resource of data.resources) {
+        expect(fs.readFileSync(path.join(testWorkspace, resource.output!), 'utf-8')).toBe(resource.source);
+      }
+    });
+
+    it('does not treat a pre-existing output as a new agent result', async () => {
+      ResourcesManager.addResource(testWorkspace, 'https://www.youtube.com/watch?v=new', 'video', []);
+      const existingPath = path.join(testWorkspace, 'video', 'watch.md');
+      fs.writeFileSync(existingPath, '# Previous transcript');
+
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentRunner: async () => undefined,
+      });
+
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(ResourcesManager.load(testWorkspace).resources[0].status).toBe('failed');
+      expect(fs.readFileSync(existingPath, 'utf-8')).toBe('# Previous transcript');
+    });
+
+    it('hands off previously failed resources when an agent is provided', async () => {
+      ResourcesManager.addResource(testWorkspace, 'video-retry', 'video', []);
+      await ingestWorkspace(testWorkspace, testConfig);
+      expect(ResourcesManager.load(testWorkspace).resources[0].status).toBe('failed');
+
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentRunner: async ({ workspacePath, resources }) => {
+          fs.writeFileSync(path.join(workspacePath, resources[0].expectedOutput), '# Recovered transcript');
+        },
+      });
+
+      expect(result.success).toBe(1);
+      expect(result.skipped).toBe(0);
+      expect(result.handedOff).toBe(1);
+      expect(ResourcesManager.load(testWorkspace).resources[0].status).toBe('ingested');
+    });
+
+    it('includes an absolute input path for a local PDF handoff', async () => {
+      const source = './paper.pdf';
+      ResourcesManager.addResource(testWorkspace, source, 'pdf', []);
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        adapterChains: { ...testConfig.adapterChains, pdf: [] },
+        agentRunner: async ({ workspacePath, manifestPath, resources }) => {
+          const manifest = fs.readFileSync(manifestPath, 'utf-8');
+          expect(manifest).toContain(`- Input path: ${path.resolve(source)}`);
+          fs.writeFileSync(path.join(workspacePath, resources[0].expectedOutput), '# Paper');
+        },
+      });
+      expect(result.success).toBe(1);
+    });
+
+    it('rejects empty document files and empty repository directories', async () => {
+      ResourcesManager.addResource(testWorkspace, 'video-empty', 'video', []);
+      ResourcesManager.addResource(testWorkspace, 'https://github.com/example/empty', 'repos', []);
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        adapterChains: { ...testConfig.adapterChains, repos: [] },
+        agentRunner: async ({ workspacePath, resources }) => {
+          for (const item of resources) {
+            const output = path.join(workspacePath, item.expectedOutput);
+            if (item.resource.type === 'repos') fs.mkdirSync(output);
+            else fs.writeFileSync(output, '');
+          }
+        },
+      });
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(2);
+    });
+
+    it('does not accept partial output when the agent exits with an error', async () => {
+      ResourcesManager.addResource(testWorkspace, 'video-partial', 'video', []);
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentRunner: async ({ workspacePath, resources }) => {
+          fs.writeFileSync(path.join(workspacePath, resources[0].expectedOutput), '# Partial transcript');
+          throw new Error('Agent exited before completing the output');
+        },
+      });
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(ResourcesManager.load(testWorkspace).resources[0].status).toBe('failed');
+    });
+
+    it('cancels the agent and rejects partial output when it times out', async () => {
+      ResourcesManager.addResource(testWorkspace, 'video-cancel', 'video', []);
+      let cancelled = false;
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentTimeout: 10,
+        agentRunner: async (handoff) => {
+          fs.writeFileSync(path.join(handoff.workspacePath, handoff.resources[0].expectedOutput), '# Partial');
+          await new Promise<void>((resolve) => {
+            handoff.signal?.addEventListener('abort', () => {
+              cancelled = true;
+              resolve();
+            }, { once: true });
+          });
+        },
+      });
+      expect(cancelled).toBe(true);
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(ResourcesManager.load(testWorkspace).resources[0].status).toBe('failed');
+    });
+
     it('keeps the resource failed when the agent times out', async () => {
       ResourcesManager.addResource(testWorkspace, 'video-456', 'video', []);
       const result = await ingestWorkspace(testWorkspace, {

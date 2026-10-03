@@ -8,7 +8,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 type ExtensionPreferences = {
-  /** Learn Executable - Optional path to the learn executable when it is not on Raycast's PATH */
+  /** Learn Executable - Path to the Learn CLI installed from Humanive/Learn; see About This Extension for setup */
   "learnExecutable": string
 }
 

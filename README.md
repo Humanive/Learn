@@ -4,12 +4,13 @@
 
 ## Architecture
 
-This is a TypeScript monorepo with two packages:
+This is a TypeScript monorepo with three packages:
 
-- **`packages/core`** — shared logic: config, workspace, SOURCES.md parser, ingest router, types
+- **`packages/core`** — shared logic: config, workspaces, resources, adapters, and ingestion
 - **`apps/cli`** — the `learn` CLI tool
+- **`apps/raycast`** — browser URL capture through the installed Learn CLI
 
-Future capture interfaces (Raycast extension, browser extension, MCP server) will depend on `@learn/core` and live under `apps/`.
+Future capture interfaces (browser extension, MCP server) will live under `apps/`.
 
 ## Installation
 
@@ -19,12 +20,7 @@ pnpm build
 pnpm learn
 ```
 
-Link the CLI globally:
-
-```bash
-cd apps/cli
-npm link
-```
+For Raycast setup, see [the extension README](apps/raycast/README.md). It explains how to use the compiled CLI's absolute path without a global npm install. Store submission requirements and remaining blockers are recorded in [the publishing guide](docs/raycast-store.md).
 
 ## Usage
 
@@ -40,7 +36,7 @@ learn add https://arxiv.org/abs/2501.01234
 learn list
 
 # Save the current browser URL from Raycast
-# Install and run the extension from apps/raycast with: pnpm develop
+# Run the extension from this repository with: pnpm --filter learn-raycast develop
 # The first capture asks for a workspace; later captures reuse it.
 
 # Ingest resources with deterministic adapters
@@ -61,21 +57,22 @@ Each workspace under `~/Learn/<name>/` contains:
 
 ```
 browser-agents/
-├── SOURCES.md          # Inbox, Processing, Done
-├── GOAL.md             # What you're learning
-├── QUESTIONS.md        # Open questions
-├── docs/               # Converted markdown
+├── resources.json      # Resource status, provenance, and output paths
+├── web/                # Webpage content
+├── pdf/                # Converted PDFs
+├── video/              # Video content
 ├── repos/              # Cloned repositories
+├── local/              # Local resource content
 └── .learn/
-    └── state.json      # Resource metadata
+    └── failed-resources.md  # Temporary agent handoff manifest
 ```
 
 Global config at `~/.learn/config.yaml`:
 
 ```yaml
-workspaceRoot: ~/Learn
-defaultCloneDepth: 1
-jinaReaderApiKey: optional
+learnDir: ~/Learn
+defaultGitDepth: 1
+jinaApiKey: null
 ```
 
 ## Development
@@ -94,14 +91,14 @@ pnpm --filter @learn/core test
 ## Roadmap
 
 - ✅ Project-centric workspace structure
-- ✅ CLI commands: `new`, `add`, `list`
-- ✅ SOURCES.md inbox parser
+- ✅ CLI commands: `new`, `add`, `list`, `rm`, `tag`
+- ✅ Workspace resources recorded in `resources.json`
 - ✅ Ingest router with type detection
-- ⏳ Ingestion handlers (Jina Reader, git clone, MarkItDown, YouTube transcript)
-- ⏳ `learn ingest` command
+- ✅ Deterministic adapters: Jina Reader, git clone, MarkItDown, local symlinks
+- ✅ `learn ingest` with external agent handoff and failed-resource retries
+- ✅ Raycast browser URL capture
+- ⏳ Raycast Store submission
 - ⏳ `learn open` command
 - ⏳ `learn search` command
-- ⏳ Raycast extension
 - ⏳ Browser extension
 - ⏳ MCP server
-- ⏳ DeepSeek/Claude Code integration

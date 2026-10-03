@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -149,6 +149,86 @@ describe('learn CLI', () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('browser-agents');
       expect(result.stdout).toContain('Resources: 1 (1 pending)');
+    });
+  });
+
+  describe('ingest agent handoff', () => {
+    it('stops the external agent when the Learn CLI is interrupted', async () => {
+      run(['new', 'browser-agents']);
+      run(['add', 'https://www.youtube.com/watch?v=interrupt']);
+      const binDir = path.join(home, 'bin');
+      fs.mkdirSync(binDir);
+      const readyPath = path.join(home, 'agent-ready');
+      const stoppedPath = path.join(home, 'agent-stopped');
+      const agentPath = path.join(binDir, 'codex');
+      fs.writeFileSync(agentPath, `#!${process.execPath}\n` + [
+        "const fs = require('fs');",
+        `process.on('SIGTERM', () => { fs.writeFileSync(${JSON.stringify(stoppedPath)}, 'stopped'); process.exit(0); });`,
+        `fs.writeFileSync(${JSON.stringify(readyPath)}, String(process.pid));`,
+        'setInterval(() => {}, 100);',
+      ].join('\n'), { mode: 0o755 });
+
+      const child = spawn(process.execPath, [CLI, 'ingest', '--agent', 'codex'], {
+        cwd: home,
+        env: { ...process.env, HOME: home, PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
+        stdio: 'ignore',
+      });
+      const exit = new Promise<void>((resolve, reject) => {
+        child.once('exit', () => resolve());
+        child.once('error', reject);
+      });
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const started = Date.now();
+        while (!fs.existsSync(readyPath) && Date.now() - started < 2000) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        expect(fs.existsSync(readyPath)).toBe(true);
+        child.kill('SIGTERM');
+        await Promise.race([
+          exit,
+          new Promise<void>((_, reject) => { deadline = setTimeout(() => reject(new Error('CLI did not stop')), 2500); }),
+        ]);
+        expect(fs.existsSync(stoppedPath)).toBe(true);
+      } finally {
+        if (deadline) clearTimeout(deadline);
+        child.kill('SIGKILL');
+        if (fs.existsSync(readyPath)) {
+          try { process.kill(Number(fs.readFileSync(readyPath, 'utf-8')), 'SIGKILL'); } catch { /* Agent already stopped. */ }
+        }
+      }
+    });
+
+    it('hands previously failed resources to an agent from the CLI', () => {
+      run(['new', 'browser-agents']);
+      run(['add', 'https://www.youtube.com/watch?v=retry']);
+      expect(run(['ingest']).status).toBe(0);
+
+      const binDir = path.join(home, 'bin');
+      fs.mkdirSync(binDir);
+      const agent = path.join(binDir, 'codex');
+      fs.writeFileSync(agent, `#!${process.execPath}\n` + [
+        "const fs = require('fs');",
+        "const path = require('path');",
+        "const assert = require('assert');",
+        "assert(process.argv.includes('--skip-git-repo-check'));",
+        "const manifest = fs.readFileSync('.learn/failed-resources.md', 'utf8');",
+        "const output = manifest.match(/^- Expected output: (.+)$/m)[1];",
+        "fs.mkdirSync(path.dirname(output), { recursive: true });",
+        "fs.writeFileSync(output, '# Recovered transcript');",
+      ].join('\n'), { mode: 0o755 });
+
+      const result = spawnSync('node', [CLI, 'ingest', '--agent', 'codex'], {
+        cwd: home,
+        env: { ...process.env, HOME: home, FORCE_COLOR: '0', PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
+        encoding: 'utf-8',
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Handed off: 1');
+      const resourcesFile = JSON.parse(
+        fs.readFileSync(path.join(workspaceDir('browser-agents'), 'resources.json'), 'utf-8')
+      );
+      expect(resourcesFile.resources[0]).toMatchObject({ status: 'ingested', adapter: 'agent:codex' });
     });
   });
 

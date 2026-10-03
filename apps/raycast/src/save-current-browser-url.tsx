@@ -8,18 +8,18 @@ import {
   showHUD,
   showToast,
   Toast,
-} from '@raycast/api';
-import { usePromise } from '@raycast/utils';
-import { useEffect, useState } from 'react';
+} from "@raycast/api";
+import { usePromise } from "@raycast/utils";
+import { useEffect, useState } from "react";
 import {
   captureBrowserUrl,
   CAPTURE_WORKSPACE_KEY,
   getSavedCaptureWorkspace,
   type CaptureResult,
-} from './capture.js';
-import { getActiveBrowserTabs, type BrowserTab } from './browser.js';
-import { listLearnWorkspaces, runLearn } from './learn-cli.js';
-import { getLearnExecutable } from './preferences.js';
+} from "./capture.js";
+import { getActiveBrowserTabs, type BrowserTab } from "./browser.js";
+import { listLearnWorkspaces, runLearn } from "./learn-cli.js";
+import { getLearnExecutable } from "./preferences.js";
 
 interface CaptureContext {
   tabs: BrowserTab[];
@@ -32,12 +32,17 @@ export default function SaveCurrentBrowserUrl() {
   const { data, isLoading, error } = usePromise(
     () => loadCaptureContext(executable),
     [],
-    { onError: () => undefined, failureToastOptions: { title: 'Could not save browser URL' } }
+    {
+      onError: () => undefined,
+      failureToastOptions: { title: "Could not save browser URL" },
+    },
   );
 
   if (error) return <ErrorView message={error.message} />;
   if (isLoading || !data) {
-    return <List isLoading searchBarPlaceholder="Reading current browser tab…" />;
+    return (
+      <List isLoading searchBarPlaceholder="Reading current browser tab…" />
+    );
   }
 
   return <CaptureFlow context={data} executable={executable} />;
@@ -49,9 +54,14 @@ async function loadCaptureContext(executable: string): Promise<CaptureContext> {
     BrowserExtension.getTabs(),
     listLearnWorkspaces(executable),
   ]);
-  const activeTabs = getActiveBrowserTabs({ applicationName: application.name, tabs });
+  const activeTabs = getActiveBrowserTabs({
+    applicationName: application.name,
+    tabs,
+  });
   if (workspaces.length === 0) {
-    throw new Error('No Learn workspace found. Create one with: learn new <name>');
+    throw new Error(
+      "No Learn workspace found. Create one with: learn new <name>",
+    );
   }
 
   return {
@@ -64,16 +74,28 @@ async function loadCaptureContext(executable: string): Promise<CaptureContext> {
   };
 }
 
-function CaptureFlow({ context, executable }: { context: CaptureContext; executable: string }) {
+function CaptureFlow({
+  context,
+  executable,
+}: {
+  context: CaptureContext;
+  executable: string;
+}) {
   const [selectedTab, setSelectedTab] = useState<BrowserTab | undefined>(
-    context.tabs.length === 1 ? context.tabs[0] : undefined
+    context.tabs.length === 1 ? context.tabs[0] : undefined,
   );
 
   if (!selectedTab) {
     return <BrowserTabPicker tabs={context.tabs} onSelect={setSelectedTab} />;
   }
   if (context.savedWorkspace) {
-    return <SavingView tab={selectedTab} workspace={context.savedWorkspace} executable={executable} />;
+    return (
+      <SavingView
+        tab={selectedTab}
+        workspace={context.savedWorkspace}
+        executable={executable}
+      />
+    );
   }
   return (
     <WorkspacePicker
@@ -121,11 +143,15 @@ function SavingView({
   const { data, error } = usePromise(
     () => saveToWorkspace(tab, workspace, executable),
     [],
-    { onError: () => undefined, failureToastOptions: { title: 'Could not save browser URL' } }
+    {
+      onError: () => undefined,
+      failureToastOptions: { title: "Could not save browser URL" },
+    },
   );
 
   if (error) return <ErrorView message={error.message} />;
-  if (!data) return <List isLoading searchBarPlaceholder="Saving browser URL…" />;
+  if (!data)
+    return <List isLoading searchBarPlaceholder="Saving browser URL…" />;
   return <ResultView result={data} title={tab.title} workspace={workspace} />;
 }
 
@@ -149,7 +175,9 @@ function WorkspacePicker({
             <ActionPanel>
               <Action
                 title="Save to Workspace"
-                onAction={() => saveSelectedWorkspace(tab, workspace, executable)}
+                onAction={() =>
+                  saveSelectedWorkspace(tab, workspace, executable)
+                }
               />
             </ActionPanel>
           }
@@ -162,18 +190,16 @@ function WorkspacePicker({
 async function saveSelectedWorkspace(
   tab: BrowserTab,
   workspace: string,
-  executable: string
+  executable: string,
 ): Promise<void> {
   try {
     const result = await saveToWorkspace(tab, workspace, executable);
-    if (result.status === 'saved') {
-      await LocalStorage.setItem(CAPTURE_WORKSPACE_KEY, workspace);
-    }
+    await LocalStorage.setItem(CAPTURE_WORKSPACE_KEY, workspace);
     await showResultToast(result, tab.title, workspace);
   } catch (error) {
     await showToast({
       style: Toast.Style.Failure,
-      title: 'Could not save browser URL',
+      title: "Could not save browser URL",
       message: error instanceof Error ? error.message : String(error),
     });
   }
@@ -182,7 +208,7 @@ async function saveSelectedWorkspace(
 async function saveToWorkspace(
   tab: BrowserTab,
   workspace: string,
-  executable: string
+  executable: string,
 ): Promise<CaptureResult> {
   return captureBrowserUrl({
     url: tab.url,
@@ -195,21 +221,27 @@ async function saveToWorkspace(
 async function showResultToast(
   result: CaptureResult,
   title: string | undefined,
-  workspace: string
+  workspace: string,
 ): Promise<void> {
-  if (result.status === 'duplicate') {
+  if (result.status === "duplicate") {
     await showToast({
       style: Toast.Style.Failure,
-      title: 'Already saved',
+      title: "Already saved",
       message: `This URL is already in ${workspace}`,
     });
     return;
   }
 
-  await showHUD(title ? `Saved “${title}” to ${workspace}` : `Saved URL to ${workspace}`);
+  await showHUD(
+    title ? `Saved “${title}” to ${workspace}` : `Saved URL to ${workspace}`,
+  );
 }
 
-function ResultView({ result, title, workspace }: {
+function ResultView({
+  result,
+  title,
+  workspace,
+}: {
   result: CaptureResult;
   title?: string;
   workspace: string;
@@ -222,7 +254,11 @@ function ResultView({ result, title, workspace }: {
 
 function ErrorView({ message }: { message: string }) {
   useEffect(() => {
-    void showToast({ style: Toast.Style.Failure, title: 'Could not save browser URL', message });
+    void showToast({
+      style: Toast.Style.Failure,
+      title: "Could not save browser URL",
+      message,
+    });
   }, [message]);
   return <List searchBarPlaceholder="Could not save browser URL" />;
 }

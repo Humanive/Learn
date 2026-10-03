@@ -29,7 +29,7 @@ The ordered list of adapters tried for a resource type; the first one that succe
 _Avoid_: fallback list, pipeline
 
 **Agent handoff**:
-Passing every resource whose adapter chain failed, together in one go, to an external coding agent chosen by the user. The CLI writes a temporary `.learn/failed-resources.md` listing each resource, its type, failure reason, and expected output path; the agent reads it, processes what it can, and writes files to the workspace; the CLI scans output directories to determine success and updates `resources.json`.
+Passing every resource whose adapter chain failed, together in one go, to an external coding agent chosen by the user. Ordinary ingestion processes only pending resources; when an agent is selected, previously failed resources join the handoff too. The CLI writes a temporary `.learn/failed-resources.md` listing each resource, its type, failure reason, absolute input path for local resources, and unique unoccupied output path. The agent writes content files only; after a successful agent exit, the CLI verifies outputs and updates `resources.json`. Failed or timed-out handoffs keep resources failed. Timeout or user interruption stops the external agent.
 _Avoid_: AI mode, smart ingest
 
 **Resource type**:

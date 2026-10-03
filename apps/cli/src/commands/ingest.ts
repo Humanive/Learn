@@ -10,8 +10,8 @@ interface IngestOptions {
 }
 
 const AGENT_COMMANDS: Record<string, { command: string; args: (prompt: string) => string[] }> = {
-  claude: { command: 'claude', args: (prompt) => ['-p', prompt] },
-  codex: { command: 'codex', args: (prompt) => ['exec', '--full-auto', prompt] },
+  claude: { command: 'claude', args: (prompt) => ['-p', '--permission-mode', 'acceptEdits', prompt] },
+  codex: { command: 'codex', args: (prompt) => ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check', prompt] },
   pi: { command: 'pi', args: (prompt) => ['-p', prompt] },
 };
 
@@ -29,30 +29,70 @@ function createAgentRunner(agentName: string, timeoutMs: number) {
       'Process every resource you can and write each result to its exact expected output path in the workspace.',
       'Keep resources you cannot process untouched and do not edit resources.json.',
     ].join(' ');
+    if (handoff.signal?.aborted) {
+      reject(new Error('Agent handoff cancelled'));
+      return;
+    }
+    const grouped = process.platform !== 'win32';
     const child = spawn(agent.command, agent.args(prompt), {
       cwd: handoff.workspacePath,
       stdio: 'inherit',
       shell: false,
+      detached: grouped,
     });
 
     let settled = false;
-    const timer = setTimeout(() => {
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const interruptHandler = () => {
+      process.exitCode = 130;
+      terminate();
+    };
+    const terminationHandler = () => {
+      process.exitCode = 143;
+      terminate();
+    };
+    const cleanup = () => {
+      handoff.signal?.removeEventListener('abort', terminate);
+      process.removeListener('SIGINT', interruptHandler);
+      process.removeListener('SIGTERM', terminationHandler);
+    };
+    const terminate = () => {
       if (settled) return;
       settled = true;
-      child.kill('SIGTERM');
-      reject(new Error(`${agent.command} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+      clearTimeout(timer);
+      cleanup();
+      const kill = (signal: NodeJS.Signals) => {
+        try {
+          if (grouped && child.pid) process.kill(-child.pid, signal);
+          else child.kill(signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+            console.warn(`Unable to stop ${agent.command}: ${(error as Error).message}`);
+          }
+        }
+      };
+      kill('SIGTERM');
+      killTimer = setTimeout(() => kill('SIGKILL'), 1000);
+      reject(new Error(`${agent.command} handoff cancelled or timed out after ${timeoutMs}ms`));
+    };
+    const timer = setTimeout(terminate, timeoutMs);
+    handoff.signal?.addEventListener('abort', terminate, { once: true });
+    process.once('SIGINT', interruptHandler);
+    process.once('SIGTERM', terminationHandler);
 
     child.once('error', (error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      cleanup();
       reject(error);
     });
     child.once('exit', (code, signal) => {
+      if (killTimer && !grouped) clearTimeout(killTimer);
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      cleanup();
       if (code === 0) {
         resolve();
       } else {
@@ -98,16 +138,21 @@ async function action(options: IngestOptions): Promise<void> {
 
     // Get counts before processing
     const counts = ResourcesManager.getCounts(workspacePath);
+    const globalConfig = await configManager.load();
+    const agentName = options.agent || globalConfig.agent;
+    const failedCount = agentName
+      ? ResourcesManager.load(workspacePath).resources.filter(resource => resource.status === 'failed').length
+      : 0;
 
-    if (counts.pending === 0) {
+    if (counts.pending === 0 && failedCount === 0) {
       console.log(chalk.yellow('No pending resources to ingest'));
       return;
     }
 
     console.log(chalk.cyan(`Ingesting ${counts.pending} pending resource(s)...\n`));
-
-    // Load global config
-    const globalConfig = await configManager.load();
+    if (failedCount > 0) {
+      console.log(chalk.cyan(`Handing ${failedCount} previously failed resource(s) to ${agentName}...\n`));
+    }
 
     // Build ingest config
     const config: IngestConfig = {
@@ -121,9 +166,9 @@ async function action(options: IngestOptions): Promise<void> {
       concurrency: 3,
       agentTimeout: AGENT_TIMEOUT,
       globalConfig,
-      agentName: options.agent || globalConfig.agent,
-      agentRunner: options.agent || globalConfig.agent
-        ? createAgentRunner(options.agent || globalConfig.agent!, AGENT_TIMEOUT)
+      agentName,
+      agentRunner: agentName
+        ? createAgentRunner(agentName, AGENT_TIMEOUT)
         : undefined,
     };
 

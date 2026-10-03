@@ -1,14 +1,18 @@
 {
-  "name": "@learn/raycast",
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "learn-raycast",
   "version": "0.1.0",
   "private": true,
-  "description": "Raycast capture interface for Learn",
+  "description": "Save the current browser URL to a local Learn workspace",
   "author": "Humanive",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "ray build",
+    "build": "ray build -e dist",
     "develop": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix",
+    "publish": "npx @raycast/api@latest publish",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -19,13 +23,16 @@
     "react": "19.0.0"
   },
   "devDependencies": {
-    "@types/node": "20.19.43",
+    "@raycast/eslint-config": "2.2.0",
+    "@types/node": "22.19.17",
     "@types/react": "19.0.10",
+    "eslint": "10.11.0",
+    "prettier": "3.9.9",
     "typescript": "5.9.3",
     "vitest": "1.6.1"
   },
-  "title": "Learn",
-  "icon": "assets/icon.png",
+  "title": "Learn Browser Capture",
+  "icon": "icon.png",
   "platforms": [
     "macOS"
   ],
@@ -50,8 +57,9 @@
     {
       "name": "learnExecutable",
       "title": "Learn Executable",
-      "description": "Optional path to the learn executable when it is not on Raycast's PATH",
+      "description": "Path to the Learn CLI installed from Humanive/Learn; see About This Extension for setup",
       "type": "textfield",
+      "placeholder": "/opt/homebrew/bin/learn",
       "required": false,
       "default": "learn"
     }

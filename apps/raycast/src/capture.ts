@@ -1,4 +1,4 @@
-export const CAPTURE_WORKSPACE_KEY = 'learn.capture.workspace';
+export const CAPTURE_WORKSPACE_KEY = "learn.capture.workspace";
 
 export interface CaptureStore {
   getItem(key: string): Promise<string | undefined>;
@@ -31,19 +31,23 @@ export interface BrowserCaptureDependencies {
 }
 
 export type CaptureResult =
-  | { status: 'saved'; title?: string }
-  | { status: 'duplicate' };
+  { status: "saved"; title?: string } | { status: "duplicate" };
 
 export async function getSavedCaptureWorkspace(
-  dependencies: SavedWorkspaceDependencies
+  dependencies: SavedWorkspaceDependencies,
 ): Promise<string | undefined> {
-  const savedWorkspace = await dependencies.store.getItem(CAPTURE_WORKSPACE_KEY);
-  const workspaces = dependencies.workspaces || await dependencies.listWorkspaces();
-  return savedWorkspace && workspaces.includes(savedWorkspace) ? savedWorkspace : undefined;
+  const savedWorkspace = await dependencies.store.getItem(
+    CAPTURE_WORKSPACE_KEY,
+  );
+  const workspaces =
+    dependencies.workspaces || (await dependencies.listWorkspaces());
+  return savedWorkspace && workspaces.includes(savedWorkspace)
+    ? savedWorkspace
+    : undefined;
 }
 
 export async function resolveCaptureWorkspace(
-  dependencies: WorkspaceSelectionDependencies
+  dependencies: WorkspaceSelectionDependencies,
 ): Promise<string> {
   const workspaces = await dependencies.listWorkspaces();
   const savedWorkspace = await getSavedCaptureWorkspace({
@@ -52,12 +56,14 @@ export async function resolveCaptureWorkspace(
   });
   if (savedWorkspace) return savedWorkspace;
   if (workspaces.length === 0) {
-    throw new Error('No Learn workspace found. Create one with: learn new <name>');
+    throw new Error(
+      "No Learn workspace found. Create one with: learn new <name>",
+    );
   }
 
   const selectedWorkspace = await dependencies.chooseWorkspace(workspaces);
   if (!selectedWorkspace) {
-    throw new Error('Workspace selection was cancelled');
+    throw new Error("Workspace selection was cancelled");
   }
   if (!workspaces.includes(selectedWorkspace)) {
     throw new Error(`Unknown Learn workspace: ${selectedWorkspace}`);
@@ -68,23 +74,25 @@ export async function resolveCaptureWorkspace(
 }
 
 export async function captureBrowserUrl(
-  dependencies: BrowserCaptureDependencies
+  dependencies: BrowserCaptureDependencies,
 ): Promise<CaptureResult> {
   const result = await dependencies.runLearn([
-    'add',
+    "add",
     dependencies.url,
-    '--workspace',
+    "--workspace",
     dependencies.workspace,
-    ...(dependencies.title ? ['--title', dependencies.title] : []),
+    ...(dependencies.title ? ["--title", dependencies.title] : []),
   ]);
 
   if (result.code === 0) {
-    return { status: 'saved', title: dependencies.title };
+    return { status: "saved", title: dependencies.title };
   }
 
-  if (result.stderr.includes('already exists')) {
-    return { status: 'duplicate' };
+  if (result.stderr.includes("already exists")) {
+    return { status: "duplicate" };
   }
 
-  throw new Error(result.stderr || result.stdout || 'Failed to save browser URL');
+  throw new Error(
+    result.stderr || result.stdout || "Failed to save browser URL",
+  );
 }
