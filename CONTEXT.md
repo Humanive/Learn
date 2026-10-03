@@ -7,7 +7,7 @@ Learn turns the scattered material you collect while studying a topic into a loc
 ### Workspaces
 
 **Workspace**:
-One folder holding everything collected for a single learning topic. Contains `resources.json` and five output directories: `web/`, `pdf/`, `video/`, `repos/`, `local/`. A workspace name is never a top-level command name (`new`, `add`, `list`, `ls`, `rm`, `tag`, `ingest`), because `learn <workspace> list` names a workspace as its first argument.
+One folder holding everything collected for a single learning topic. Contains `resources.json` and five output directories: `web/`, `pdf/`, `video/`, `repos/`, `local/`. A workspace name is never a top-level command name (`new`, `add`, `list`, `ls`, `rm`, `tag`, `ingest`, `help`), because `learn <workspace> list` names a workspace as its first argument.
 _Avoid_: project, topic folder, collection
 
 ### Resources and ingestion

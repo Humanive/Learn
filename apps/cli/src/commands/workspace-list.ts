@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { workspaceManager, ResourcesManager } from '@learn/core';
-import type { ResourceEntry, ResourceStatus, ResourceType } from '@learn/core';
+import type { ResourceStatus, ResourceType } from '@learn/core';
 import * as path from 'path';
 import chalk from 'chalk';
 
@@ -90,9 +90,7 @@ async function action(workspaceName: string, options: WorkspaceListOptions): Pro
 
     console.log(chalk.bold(`\nResources in ${workspaceName} (${resources.length}):\n`));
 
-    if (options.verbose) {
-      console.log(chalk.gray(`  Workspace: ${workspacePath}`));
-    }
+    console.log(chalk.gray(`  Workspace: ${workspacePath}\n`));
 
     resources.forEach((resource, index) => {
       const label = resource.title ?? resource.source;

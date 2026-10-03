@@ -48,12 +48,12 @@ describe('learn CLI', () => {
       expect(result.stderr).toContain('already exists');
     });
 
-    it('rejects workspace names that collide with a top-level command', () => {
-      const result = run(['new', 'list']);
+    it.each(['list', 'help'])('rejects the reserved workspace name %s', (name) => {
+      const result = run(['new', name]);
 
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('reserved');
-      expect(fs.existsSync(path.join(workspaceDir('list')))).toBe(false);
+      expect(fs.existsSync(workspaceDir(name))).toBe(false);
     });
   });
 
@@ -500,6 +500,25 @@ describe('learn CLI', () => {
 
       expect(ls.status).toBe(0);
       expect(ls.stdout).toBe(list.stdout);
+    });
+
+    it('includes the workspace prefix in scoped help', () => {
+      const result = run(['vibe-coding', 'list', '--help']);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Usage: learn vibe-coding list');
+      expect(result.stdout).toContain('--status');
+      expect(result.stdout).toContain('--type');
+      expect(result.stdout).toContain('--tag');
+    });
+
+    it('requires a subcommand instead of implicitly listing resources', () => {
+      seedVibeCoding();
+      const result = run(['vibe-coding']);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain('Usage: learn vibe-coding');
+      expect(result.stdout + result.stderr).not.toContain('Agent skills');
     });
 
     it('adds metadata and absolute paths with --verbose', () => {

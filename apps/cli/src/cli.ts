@@ -33,7 +33,6 @@ const [first] = args;
 const isWorkspaceScope =
   first !== undefined &&
   !first.startsWith('-') &&
-  first !== 'help' &&
   !(RESERVED_WORKSPACE_NAMES as readonly string[]).includes(first);
 
 if (isWorkspaceScope) {
@@ -41,7 +40,7 @@ if (isWorkspaceScope) {
   // with the workspace index `list` registered above.
   const scopedProgram = new Command();
   scopedProgram
-    .name('learn')
+    .name(`learn ${first}`)
     .description(`Commands scoped to the "${first}" workspace`)
     .version('0.1.0');
   scopedProgram.addCommand(workspaceListCommand(first));
