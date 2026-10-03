@@ -35,6 +35,12 @@ learn add https://arxiv.org/abs/2501.01234
 # List workspaces
 learn list
 
+# List the resources in one workspace
+learn browser-agents list
+learn browser-agents ls --status pending
+learn browser-agents ls --type repos --tag python
+learn browser-agents ls --verbose
+
 # Save the current browser URL from Raycast
 # Run the extension from this repository with: pnpm --filter learn-raycast develop
 # The first capture asks for a workspace; later captures reuse it.

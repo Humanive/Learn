@@ -4,6 +4,21 @@ import { configManager } from './config.js';
 import { WorkspaceState } from './types.js';
 import { ResourcesManager } from './resources.js';
 
+/**
+ * Workspace names that would collide with a top-level CLI command name.
+ * `learn <workspace> list` is only unambiguous when no workspace can be
+ * named after a command.
+ */
+export const RESERVED_WORKSPACE_NAMES = [
+  'new',
+  'add',
+  'list',
+  'ls',
+  'rm',
+  'tag',
+  'ingest',
+] as const;
+
 export class WorkspaceManager {
   private baseDir?: string;
 
@@ -24,6 +39,13 @@ export class WorkspaceManager {
   async create(name: string): Promise<string> {
     const learnDir = await this.getBaseDir();
     const workspacePath = path.join(learnDir, name);
+
+    if ((RESERVED_WORKSPACE_NAMES as readonly string[]).includes(name)) {
+      throw new Error(
+        `Workspace name "${name}" is reserved because it is a top-level command. ` +
+          `Reserved names: ${RESERVED_WORKSPACE_NAMES.join(', ')}`
+      );
+    }
 
     if (fs.existsSync(workspacePath)) {
       throw new Error(`Workspace "${name}" already exists`);
