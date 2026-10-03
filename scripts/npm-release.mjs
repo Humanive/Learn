@@ -137,14 +137,15 @@ async function publish() {
       cwd: path.join(ROOT, directory), stdio: 'inherit',
     });
     if (index === 0) {
-      // npm can take a few seconds to expose a newly published dependency.
+      // npm processing can take several minutes before a dependency is visible.
       let visible = false;
-      for (let attempt = 0; attempt < 12; attempt++) {
+      for (let attempt = 0; attempt < 60; attempt++) {
         if ((await registryMetadata(name)).versions?.[plan.version]) {
           visible = true;
           break;
         }
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        if (attempt % 6 === 0) console.log(`Waiting for ${name}@${plan.version} to become visible on npm`);
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
       }
       if (!visible) throw new Error('Core publication is not visible yet; rerun this workflow');
     }
