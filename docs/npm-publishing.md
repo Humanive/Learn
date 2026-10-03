@@ -5,7 +5,7 @@ Learn publishes two public packages in order:
 - `@humanive/learn-core`: compiled workspace, resource, adapter, and ingestion logic.
 - `@humanive/learn-cli`: the `learn` executable, depending on the same release of core.
 
-The `humanive` npm Organization was created under the maintainer's logged-in `junjiezhou1122` account on 2026-10-03. Both packages were published at version `0.1.0` that day, and installation of the CLI and its core dependency from the official registry was verified. Both packages have a GitHub Trusted Publisher configured for `Humanive/Learn`, workflow `npm-publish.yml`, with direct publishing enabled. The workflow is prepared locally; deployment to GitHub and an actual OIDC publication remain to be verified.
+The `humanive` npm Organization was created under the maintainer's logged-in `junjiezhou1122` account on 2026-10-03. Both packages were first published at version `0.1.0`, and installation of the CLI and its core dependency from the official registry was verified. Both packages have a GitHub Trusted Publisher configured for `Humanive/Learn`, workflow `npm-publish.yml`, with direct publishing enabled. The workflow was deployed through [PR #8](https://github.com/Humanive/Learn/pull/8), and [the first main run](https://github.com/Humanive/Learn/actions/runs/37124223134) published `0.1.1` through OIDC with npm provenance. Core processing exceeded the original one-minute wait; rerunning the failed job skipped core and completed the CLI publication at the same version.
 
 ## Automatic releases
 
@@ -17,7 +17,7 @@ The workflow:
 2. Chooses a shared version for both packages from the public npm registry. The first release uses the package.json baseline, initially `0.1.0`. Subsequent releases increment the highest stable published version's patch number. A higher baseline checked into both manifests can request a minor or major release.
 3. Builds core and CLI, runs their tests, and packs both packages with pnpm. pnpm converts `workspace:*` into the exact core version in the CLI tarball.
 4. Installs the actual tarballs in a temporary directory and verifies `learn --version`, creating a workspace, adding a pending URL with a title, and the JSON API used by Raycast.
-5. Uses npm CLI and GitHub OIDC to publish core, waits for it to be visible, then publishes CLI with the `latest` tag.
+5. Uses npm CLI and GitHub OIDC to publish core, waits up to ten minutes for it to be visible, then publishes CLI with the `latest` tag.
 
 Versions are changed only in the runner checkout. The workflow does not commit version bumps back to the repository. `learn --version` reads the installed package.json, so it matches the released version.
 
