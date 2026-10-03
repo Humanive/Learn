@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { workspaceManager, ResourcesManager } from '@learn/core';
-import type { ResourceStatus, ResourceType } from '@learn/core';
+import { workspaceManager, ResourcesManager } from '@humanive/learn-core';
+import type { ResourceStatus, ResourceType } from '@humanive/learn-core';
 import * as path from 'path';
 import chalk from 'chalk';
 

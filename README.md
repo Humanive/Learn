@@ -14,13 +14,26 @@ Future capture interfaces (browser extension, MCP server) will live under `apps/
 
 ## Installation
 
+Requires Node.js 22.14 or later (Node.js 24 recommended).
+
+The CLI is published as `@humanive/learn-cli`, with `@humanive/learn-core` as its dependency. Install it with:
+
 ```bash
-pnpm install
-pnpm build
+npm install -g @humanive/learn-cli
+learn --version
+```
+
+For development, install from source:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm build:cli
 pnpm learn
 ```
 
-For Raycast setup, see [the extension README](apps/raycast/README.md). It explains how to use the compiled CLI's absolute path without a global npm install. Store submission requirements and remaining blockers are recorded in [the publishing guide](docs/raycast-store.md).
+For Raycast setup, see [the extension README](apps/raycast/README.md). Store submission requirements and remaining blockers are recorded in [the publishing guide](docs/raycast-store.md).
+
+The [npm publishing guide](docs/npm-publishing.md) covers first publication and configuring Trusted Publishing. Once configured, `.github/workflows/npm-publish.yml` automatically publishes a new patch version when CLI/core changes reach `main`.
 
 ## Usage
 
@@ -91,7 +104,7 @@ pnpm -r dev
 pnpm test
 
 # Run a single package's tests
-pnpm --filter @learn/core test
+pnpm --filter @humanive/learn-core test
 ```
 
 ## Roadmap

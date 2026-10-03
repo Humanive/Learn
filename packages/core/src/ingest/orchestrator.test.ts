@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -9,6 +9,7 @@ import { ResourcesFile } from '../types.js';
 describe('ingestWorkspace', () => {
   let testWorkspace: string;
   let testConfig: IngestConfig;
+  let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
     // Create temporary workspace
@@ -46,9 +47,18 @@ describe('ingestWorkspace', () => {
         },
       },
     };
+
+    // Keep web resources off the network: the jina adapter is the only adapter
+    // in the chains above that calls fetch.
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('network disabled in tests');
+    }) as unknown as typeof globalThis.fetch;
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
     // Clean up
     if (fs.existsSync(testWorkspace)) {
       fs.rmSync(testWorkspace, { recursive: true, force: true });
@@ -129,6 +139,24 @@ describe('ingestWorkspace', () => {
 
       const data = ResourcesManager.load(testWorkspace);
       expect(data.resources[0].status).toEqual('failed');
+    });
+
+    it('records the jina failure reason without reaching the network', async () => {
+      ResourcesManager.addResource(testWorkspace, 'https://nonexistent.example.com', 'web', []);
+
+      const result = await ingestWorkspace(testWorkspace, {
+        ...testConfig,
+        agentName: 'test-agent',
+        agentRunner: async () => undefined,
+      });
+
+      expect(result.failed).toEqual(1);
+      const manifest = fs.readFileSync(
+        path.join(testWorkspace, '.learn', 'failed-resources.md'),
+        'utf-8'
+      );
+      expect(manifest).toContain('jina: Failed to fetch webpage: network disabled in tests');
+      expect(fs.readdirSync(path.join(testWorkspace, 'web'))).toEqual([]);
     });
   });
 

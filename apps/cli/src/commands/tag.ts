@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { workspaceManager, ResourcesManager } from '@learn/core';
+import { workspaceManager, ResourcesManager } from '@humanive/learn-core';
 import chalk from 'chalk';
 
 interface TagOptions {

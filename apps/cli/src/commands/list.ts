@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { workspaceManager, ResourcesManager } from '@learn/core';
+import { workspaceManager, ResourcesManager } from '@humanive/learn-core';
 import * as path from 'path';
 import chalk from 'chalk';
 
@@ -48,6 +48,6 @@ async function action(options: ListOptions): Promise<void> {
 
 export const listCommand = new Command('list')
   .alias('ls')
-  .description('List learning workspaces (use `learn <workspace> list` to list one workspace\'s resources)')
+  .description('List all learning workspaces (use learn <workspace> list for resources)')
   .option('--json', 'print workspace names as JSON')
   .action(action);

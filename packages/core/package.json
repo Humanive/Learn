@@ -1,8 +1,25 @@
 {
-  "name": "@learn/core",
+  "name": "@humanive/learn-core",
   "version": "0.1.0",
   "description": "Shared core logic for Learn workspace system",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Humanive/Learn.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/Humanive/Learn#readme",
+  "bugs": {
+    "url": "https://github.com/Humanive/Learn/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "files": ["dist", "README.md"],
   "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

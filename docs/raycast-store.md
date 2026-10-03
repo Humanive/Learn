@@ -4,12 +4,13 @@ The extension lives in `apps/raycast`. Its Store title is **Learn Browser Captur
 
 ## Current Submission Blockers
 
-1. Set `apps/raycast/package.json` → `author` to the maintainer's confirmed Raycast username. `Humanive` returned HTTP 404 during Raycast's author validation on 2026-10-03. An existing username alone does not establish that it belongs to the maintainer.
-2. Complete the remaining browser integration checks before Store submission: first capture, subsequent capture, duplicate URL, changing workspace, and selecting among active browser windows. Local Raycast command icons were visually verified on 2026-10-03, and the user confirmed the extension works; each of those individual flows has not been independently verified in this preparation.
+The logged-in Raycast profile was confirmed as `junjie_zhou` in ego-browser on 2026-10-03. Its profile showed zero published extensions. The manifest now uses that author, and build, 18 tests, and all Store lint checks pass.
 
-The compatible Learn CLI is included in this change and can be installed from the repository using the extension README. It supports `learn list --json` and `learn add --workspace --title`. There is no published npm package for this project; the unscoped npm package `learn` is unrelated. A versioned CLI release would make installation more convenient, but source installation is the current documented route.
+1. Complete the remaining browser integration checks before Store submission: first capture, subsequent capture, duplicate URL, changing workspace, and selecting among active browser windows. Local Raycast command icons were visually verified on 2026-10-03, and the user confirmed the extension works; each of those individual flows has not been independently verified in this preparation.
 
-No Raycast Store pull request has been opened.
+The compatible Learn CLI supports `learn list --json` and `learn add --workspace --title`. npm accepted `@humanive/learn-cli@0.1.0` and its dependency `@humanive/learn-core@0.1.0` on 2026-10-03. Install with `npm install -g @humanive/learn-cli`; both unscoped packages `learn` and `learn-cli` are unrelated projects. Newly created packages may take a few minutes to appear in registry queries. Both packages are bound to the GitHub Trusted Publisher described in [npm publishing](npm-publishing.md).
+
+Raycast Store review PR [#31878](https://github.com/raycast/extensions/pull/31878) was opened on 2026-10-03 from `junjiezhou1122:add-learn-browser-capture`. It is submitted for review, not yet merged or available in the Store.
 
 ## Packaging Already Prepared
 
@@ -21,7 +22,7 @@ No Raycast Store pull request has been opened.
 - Initial CHANGELOG entry using `{PR_MERGE_DATE}`.
 - Node type declarations aligned with the Raycast API peer dependency.
 
-The extension has no import from `@learn/core`. It invokes an externally installed Learn CLI, so its npm dependencies and source code can build independently in `raycast/extensions/extensions/learn-raycast/`.
+The extension has no import from `@humanive/learn-core`. It invokes an externally installed Learn CLI, so its npm dependencies and source code can build independently in `raycast/extensions/extensions/learn-raycast/`.
 
 ## Validate Locally
 

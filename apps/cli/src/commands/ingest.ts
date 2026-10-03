@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { spawn } from 'child_process';
-import { workspaceManager, configManager, ResourcesManager } from '@learn/core';
-import { ingestWorkspace, IngestConfig, AgentHandoff } from '@learn/core';
+import { workspaceManager, configManager, ResourcesManager } from '@humanive/learn-core';
+import { ingestWorkspace, IngestConfig, AgentHandoff } from '@humanive/learn-core';
 import chalk from 'chalk';
 
 interface IngestOptions {
