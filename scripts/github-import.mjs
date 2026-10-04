@@ -11,22 +11,14 @@ export const ISSUE_ID_METADATA_KEY = 'github_issue_id';
 export const ISSUE_MARKER_PREFIX = 'github-source:';
 export const COMMENT_MARKER_PREFIX = 'github-comment:';
 
-// `mention://agent/<uuid>` and `mention://squad/<uuid>` enqueue a run when a
-// comment is posted, so a pasted link from a public issue would spend an agent
-// run. Rewriting the scheme keeps the text readable and inert. A plain `@` is
-// not a Multica mention, but GitHub renders it as a ping, so it becomes U+FF20
-// FULLWIDTH COMMERCIAL AT on the way in.
+// Multica parses mention links even inside quoted source content.
 const MENTION_SCHEME = /mention:\/\//gi;
 const AT_SIGN = /@/g;
-// The importer reads markers back out of imported bodies, so an external body
-// that contains marker-shaped text would otherwise register as a dedupe
-// record. Bracketing the prefixes keeps the text readable and unmatchable.
+// External source text must not forge importer-owned marker lines.
 const MARKER_PREFIX = /\b(git(hub)?-(source|comment)):/g;
 
 const GITHUB_PAGE_SIZE = 100;
-// Ten pages bounds a runaway issue without hiding a real backlog; the issue
-// importer only ever runs on a live comment event, so this is generous.
-const GITHUB_MAX_PAGES = 10;
+const GITHUB_MAX_PAGES = 100;
 // The server caps a root comment read at 2000 rows and the pinned CLI does not
 // surface the truncation header, so a full page is treated as a read that may
 // have dropped the oldest markers.
@@ -46,14 +38,13 @@ export function commentMarker(key, commentId) {
 
 export function sanitizeExternalText(text) {
   return String(text ?? '')
+    .replace(/\0/g, '')
     .replace(MENTION_SCHEME, 'mention+')
     .replace(MARKER_PREFIX, '[$1]:')
     .replace(AT_SIGN, '＠');
 }
 
-// A plaintext fence long enough to outlast the source text renders the import
-// as inert quoted text, so a mermaid diagram or an html card in the original
-// body cannot become a live one here.
+// A longer text fence prevents source HTML and Mermaid blocks from rendering.
 function quoteSource(text) {
   const longest = Array.from(text.matchAll(/`+/g), (match) => match[0].length)
     .reduce((longestSoFar, length) => Math.max(longestSoFar, length), 0);
@@ -64,7 +55,7 @@ function quoteSource(text) {
 function provenance(key, { id, url, author }) {
   return [
     `GitHub issue: ${key} (id ${id})`,
-    `Source: ${url}`,
+    `Source: ${sanitizeExternalText(url)}`,
     `Author: ${sanitizeExternalText(author)}`,
   ].join('\n');
 }
@@ -74,13 +65,28 @@ export function buildIssueDescription({ key, id, url, author, body }) {
   return `${quoteSource(text)}\n\n---\n\n${issueMarker(key)}\n${provenance(key, { id, url, author })}\n`;
 }
 
-// `/note` as the first whitespace-delimited token is Multica's own opt-out: the
-// comment is stored and rendered normally but never enqueues an agent, which
-// keeps an imported GitHub comment inert even after a human assigns the issue.
+// /note prevents implicit assignee routing as well as explicit agent triggers.
 export function buildCommentContent({ key, commentId, id, url, author, body }) {
   const text = sanitizeExternalText(body).trim() || '_No comment body._';
   const source = [commentMarker(key, commentId), provenance(key, { id, url, author })].join('\n');
   return `/note Imported from GitHub.\n\n${quoteSource(text)}\n\n---\n\n${source}\n`;
+}
+
+function validateIssue(issue) {
+  if (!issue || !Number.isSafeInteger(issue.id) || !Number.isSafeInteger(issue.number) || issue.number < 1 ||
+      typeof issue.title !== 'string' || typeof issue.html_url !== 'string' ||
+      typeof issue.user?.login !== 'string' || (issue.body !== null && typeof issue.body !== 'string')) {
+    throw new Error('invalid GitHub issue payload');
+  }
+}
+
+function validateComment(comment) {
+  if (!comment || !Number.isSafeInteger(comment.id) || comment.id < 1 ||
+      typeof comment.html_url !== 'string' || typeof comment.user?.login !== 'string' ||
+      (comment.body !== null && typeof comment.body !== 'string') ||
+      !Number.isFinite(Date.parse(comment.created_at))) {
+    throw new Error('invalid GitHub comment payload');
+  }
 }
 
 export function readEvent(payload, eventName) {
@@ -102,7 +108,7 @@ export function readEvent(payload, eventName) {
 
 export function buildCommentsUrl({ serverUrl, repository, number, page }) {
   const base = (serverUrl || 'https://api.github.com').replace(/\/+$/, '');
-  return `${base}/repos/${encodeURIComponent(repository)}/issues/${number}/comments?per_page=${GITHUB_PAGE_SIZE}&page=${page}`;
+  return `${base}/repos/${repository.split('/').map(encodeURIComponent).join('/')}/issues/${number}/comments?per_page=${GITHUB_PAGE_SIZE}&page=${page}`;
 }
 
 export async function fetchIssueComments(httpFetch, { serverUrl, token, repository, number, since }) {
@@ -118,10 +124,14 @@ export async function fetchIssueComments(httpFetch, { serverUrl, token, reposito
     });
     if (!response.ok) throw new Error(`GitHub comment list failed: HTTP ${response.status}`);
     const batch = await response.json();
+    if (!Array.isArray(batch)) throw new Error('invalid GitHub comment list');
+    batch.forEach(validateComment);
     comments.push(...batch);
-    if (batch.length < GITHUB_PAGE_SIZE) break;
+    if (batch.length < GITHUB_PAGE_SIZE) {
+      return since === undefined ? comments : comments.filter((comment) => createdAt(comment) >= since);
+    }
   }
-  return since ? comments.filter((comment) => createdAt(comment) >= since) : comments;
+  throw new Error('GitHub comment pagination exceeded 100 pages; no comments were imported');
 }
 
 function createdAt(comment) {
@@ -129,16 +139,20 @@ function createdAt(comment) {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-export function createCommandRunner({ cwd = process.cwd() } = {}) {
-  // No shell anywhere: every Multica invocation is an argument vector, so a
-  // title or comment body can never reach an interpreter.
+export function createCommandRunner({ cwd = process.cwd(), env = process.env } = {}) {
   return async (args) => {
-    const { stdout, stderr } = await execFileAsync(args[0], args.slice(1), {
-      cwd,
-      encoding: 'utf8',
-      maxBuffer: 32 * 1024 * 1024,
-    });
-    return { stdout, stderr };
+    try {
+      const { stdout, stderr } = await execFileAsync(args[0], args.slice(1), {
+        cwd,
+        env,
+        encoding: 'utf8',
+        maxBuffer: 32 * 1024 * 1024,
+        timeout: 120_000,
+      });
+      return { stdout, stderr };
+    } catch (error) {
+      throw new Error(`CLI command failed with code ${error.code ?? 'unknown'}; rerun after resolving the CLI failure`);
+    }
   };
 }
 
@@ -160,8 +174,9 @@ async function findByMetadata(run, key) {
     '--limit', '2',
     '--fields', 'id,identifier,title,metadata',
   ]);
-  const issues = page?.issues ?? [];
-  if (issues.length > 1) {
+  const issues = page?.issues;
+  if (!Array.isArray(issues)) throw new Error('invalid Multica issue list response');
+  if (issues.length > 1 || page.has_more === true) {
     throw new Error(`${key} is mapped to ${issues.length} Multica issues; resolve the duplicate before importing again`);
   }
   return issues[0] ?? null;
@@ -172,9 +187,15 @@ async function findByMetadata(run, key) {
 async function findByDescriptionMarker(run, key) {
   const marker = issueMarker(key);
   const result = await multicaJson(run, [
-    'issue', 'search', marker, '--include-closed', '--limit', '20',
+    'issue', 'search', marker, '--include-closed', '--limit', '100',
   ]);
-  const matches = (result?.issues ?? []).filter((issue) => String(issue.description ?? '').includes(marker));
+  if (!Array.isArray(result?.issues)) throw new Error('invalid Multica search response');
+  if (result.issues.length >= 100) throw new Error('Multica recovery search reached its result cap');
+  const matches = [];
+  for (const candidate of result.issues) {
+    const issue = await multicaJson(run, ['issue', 'get', candidate.id]);
+    if (String(issue.description ?? '').split('\n').some((line) => line === marker)) matches.push(issue);
+  }
   if (matches.length > 1) {
     throw new Error(`${matches.length} Multica issues carry ${marker}; resolve the duplicate before importing again`);
   }
@@ -192,6 +213,7 @@ async function setMetadata(run, issueId, key, sourceId) {
     'multica', 'issue', 'metadata', 'set', issueId,
     '--key', ISSUE_ID_METADATA_KEY,
     '--value', String(sourceId),
+    '--type', 'string',
     '--output', 'json',
   ]);
 }
@@ -209,6 +231,7 @@ async function createIssue(run, { workDir, project }, source, key) {
     '--title', sanitizeExternalText(source.title) || issueMarker(key),
     '--description-file', descriptionFile,
     '--status', 'todo',
+    '--allow-duplicate',
   ];
   if (project) args.push('--project', project);
   return multicaJson(run, args);
@@ -217,7 +240,13 @@ async function createIssue(run, { workDir, project }, source, key) {
 async function resolveIssue(run, workDir, project, repository, source) {
   const key = issueKey(repository, source.number);
   const known = await findByMetadata(run, key);
-  if (known) return { key, issue: known, created: false, recovered: false };
+  if (known) {
+    if (known.metadata?.github_issue_id !== undefined && String(known.metadata.github_issue_id) !== String(source.id)) {
+      throw new Error('source issue ID differs from the existing Multica mapping');
+    }
+    if (known.metadata?.github_issue_id === undefined) await setMetadata(run, known.id, key, source.id);
+    return { key, issue: known, created: false, recovered: false };
+  }
 
   const existing = await findByDescriptionMarker(run, key);
   if (existing) {
@@ -233,14 +262,15 @@ async function resolveIssue(run, workDir, project, repository, source) {
 async function listImportedCommentMarkers(run, issueId) {
   // No --summary: it clips the body, and the marker is the whole dedupe key.
   const comments = await multicaJson(run, ['issue', 'comment', 'list', issueId, '--roots-only']);
-  if (Array.isArray(comments) && comments.length >= COMMENT_ROOT_CAP) {
+  if (!Array.isArray(comments)) throw new Error('invalid Multica comment list response');
+  if (comments.length >= COMMENT_ROOT_CAP) {
     throw new Error(
       `issue ${issueId} has ${comments.length} root comments, the read cap; ` +
       'reconcile this issue by hand rather than risk reposting imported history',
     );
   }
   const markers = new Set();
-  for (const comment of Array.isArray(comments) ? comments : []) {
+  for (const comment of comments) {
     for (const line of String(comment.content ?? '').split('\n')) {
       if (line.startsWith(COMMENT_MARKER_PREFIX)) markers.add(line.trim());
     }
@@ -272,10 +302,14 @@ export async function importEvent({ payload, eventName }, deps) {
   const { run, fetch: httpFetch, cwd = process.cwd(), github = {}, project } = deps;
   const event = readEvent(payload, eventName);
   if (event.kind === 'skip') return { status: 'skipped', reason: event.reason };
+  if (event.issue?.pull_request) return { status: 'skipped', reason: 'pull request' };
 
   const repository = payload.repository?.full_name;
-  if (!repository) throw new Error('event payload is missing repository.full_name');
-  if (!event.issue?.number) throw new Error('event payload is missing the source issue');
+  if (typeof repository !== 'string' || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+    throw new Error('invalid event repository.full_name');
+  }
+  validateIssue(event.issue);
+  if (event.kind === 'comment') validateComment(event.comment);
 
   const workDir = await mkdtemp(path.join(cwd, '.github-import-'));
   try {
@@ -285,8 +319,6 @@ export async function importEvent({ payload, eventName }, deps) {
       key: resolved.key,
       issue: resolved.issue.identifier ?? resolved.issue.id,
     };
-    if (event.kind === 'issue') return summary;
-
     const imported = await listImportedCommentMarkers(run, resolved.issue.id);
     const source = withTrigger(
       await fetchIssueComments(httpFetch, { ...github, repository, number: event.issue.number }),
@@ -303,19 +335,22 @@ export async function importEvent({ payload, eventName }, deps) {
   }
 }
 
-export async function main({ cwd = process.cwd(), env = process.env } = {}) {
+export async function main({ cwd = process.cwd(), env = process.env, run, httpFetch = fetch } = {}) {
   const eventPath = env.GITHUB_EVENT_PATH;
   if (!eventPath) throw new Error('GITHUB_EVENT_PATH is not set');
+  if (!env.MULTICA_TOKEN?.startsWith('mul_') || !env.MULTICA_SERVER_URL || !env.MULTICA_WORKSPACE_ID) {
+    throw new Error('configure MULTICA_TOKEN with a mul_ PAT, MULTICA_SERVER_URL, and MULTICA_WORKSPACE_ID');
+  }
   // Required, and never defaulted to "now": a rerun has to reconcile against
   // the same boundary it imported the first time.
   const since = Date.parse(env.MULTICA_IMPORT_SINCE ?? '');
-  if (Number.isNaN(since)) {
+  if (Number.isNaN(since) || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(env.MULTICA_IMPORT_SINCE ?? '')) {
     throw new Error('MULTICA_IMPORT_SINCE must be an RFC3339 timestamp; it bounds which GitHub comments are imported');
   }
   const raw = JSON.parse(await readFile(eventPath, 'utf8'));
-  const result = await importEvent(raw, {
-    run: createCommandRunner({ cwd }),
-    fetch,
+  const result = await importEvent({ payload: raw, eventName: env.GITHUB_EVENT_NAME }, {
+    run: run ?? createCommandRunner({ cwd, env }),
+    fetch: httpFetch,
     cwd,
     github: { serverUrl: env.GITHUB_API_URL, token: env.GITHUB_TOKEN, since },
     project: env.MULTICA_PROJECT_ID || undefined,

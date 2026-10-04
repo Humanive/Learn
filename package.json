@@ -5,7 +5,7 @@
   "packageManager": "pnpm@12.6.0",
   "scripts": {
     "build": "pnpm -r --filter @humanive/learn-core --filter @humanive/learn-cli build && pnpm --filter learn-raycast build",
-    "test": "pnpm build && pnpm -r test",
+    "test": "pnpm test:github-import && pnpm build && pnpm -r test",
     "build:cli": "pnpm -r --filter @humanive/learn-core --filter @humanive/learn-cli build",
     "test:release": "node --test scripts/npm-release.test.mjs && pnpm build:cli && pnpm -r --filter @humanive/learn-core --filter @humanive/learn-cli test && node scripts/npm-smoke.mjs",
     "test:github-import": "node --test scripts/github-import.test.mjs",

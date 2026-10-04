@@ -22,13 +22,18 @@ Set these in the repository under Settings, Secrets and variables, Actions.
 | Name | Kind | Purpose |
 | --- | --- | --- |
 | `MULTICA_TOKEN` | Secret | A `mul_` user personal access token for the target Multica workspace. The CLI reads it from the environment, so no login, workspace discovery, or daemon runs in Actions. |
-| `MULTICA_SERVER_URL` | Variable | The Multica server URL, for example `https://multica.ai`. |
+| `MULTICA_IMPORT_ENABLED` | Variable | Set to `true` to activate imports after review. Unset by default. |
+| `MULTICA_SERVER_URL` | Variable | The Multica API URL, for example `https://api.multica.ai`. |
 | `MULTICA_WORKSPACE_ID` | Variable | UUID of the workspace that receives the issues. |
 | `MULTICA_IMPORT_SINCE` | Variable | RFC3339 timestamp. Only GitHub comments created at or after it are imported. Required, and never defaulted to the current time, so a rerun reconciles against the same boundary. |
 | `MULTICA_PROJECT_ID` | Variable | Optional. Places imported issues in a project. |
 
-The workflow itself needs no GitHub token: `GITHUB_TOKEN` is supplied
-automatically with read-only `contents` and `issues` permissions.
+The import step explicitly receives GitHub's built-in token with read-only
+`contents` and `issues` permissions. No separate GitHub credential is needed.
+For this task, the target workspace UUID is `eb954f1c-d10b-455b-a9eb-55762337e68e`.
+The repository comes from the event. Copy the workflow, script, and test to
+cogfree to reuse the importer there. Keep activation disabled until credentials
+and the destination have been reviewed.
 
 ## How duplicates are avoided
 
@@ -45,19 +50,23 @@ ever claim the same source, the run fails instead of picking one.
 Comments dedupe the same way. Each imported comment carries a
 `github-comment:Humanive/Learn#<number>/<comment id>` marker, and the importer
 compares GitHub's current comment list against the markers it finds on the
-Multica issue. This is a check-then-write, not a transaction: a comment could
-in principle be posted twice if a run dies between the comparison and the
-write. Reconciliation makes that self-healing on the next event for that issue
-rather than something the workflow tries to prevent.
+Multica issue. Source-ID lookup and writes are not atomic, so this is not a
+strict exactly-once guarantee. A completed write with an unknown result is
+recognized by its marker on a rerun. Concurrent imports outside this workflow
+can still create duplicates. Existing duplicates require manual resolution.
 
 Because a GitHub Actions concurrency group is not a FIFO queue, reconciliation
 is what makes a replaced or cancelled run safe. The workflow queues runs per
 source issue with `cancel-in-progress: false`, and each run imports every
 comment it has not seen, so a dropped middle event still lands.
 
-An issue with 2000 or more Multica comments fails the run. The server caps a
-comment read at that many rows, so the oldest markers may be missing and
-reconciling would repost history. Reconcile such an issue by hand.
+An issue with 2000 or more Multica root comments fails the run. GitHub reads
+fail after 100 full pages rather than silently dropping later comments.
+Recovery search fails when it reaches 100 results. These limits stop the import
+before an incomplete read can cause duplicates. Resolve the limit before rerunning.
+The triggering event comment is retained even if it predates `MULTICA_IMPORT_SINCE`
+or was deleted from GitHub. Reconciliation only covers comments after that
+activation boundary, not a historical bulk import.
 
 ## How imported text stays inert
 
@@ -71,8 +80,8 @@ On the way in the importer rewrites three things in the title, body and author:
 - `mention://` becomes `mention+`, so a pasted agent or squad link cannot
   enqueue a run.
 - `@` becomes U+FF20, so a GitHub handle does not ping.
-- `github-source:` and `github-comment:` lose their colon, so a source body
-  cannot forge a dedupe marker.
+- `github-source:` and `github-comment:` become `[github-source]:` and
+  `[github-comment]:`, so a source body cannot forge a dedupe marker.
 
 Imported bodies are wrapped in a plaintext code fence long enough to outlast
 any fence in the source, so a `mermaid` diagram or an `html` block stays

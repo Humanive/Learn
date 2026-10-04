@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, chmod, readFile, access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { importEvent } from './github-import.mjs';
+import { importEvent, main, fetchIssueComments, createCommandRunner } from './github-import.mjs';
 
 const flag = (args, name) => args[args.indexOf(name) + 1];
 
@@ -32,6 +32,9 @@ function createFakeMultica({ failMetadataOnce = false } = {}) {
     }
     if (area === 'issue' && group === 'search') {
       return emit({ issues: issues.filter((issue) => issue.description.includes(action)) });
+    }
+    if (area === 'issue' && group === 'get') {
+      return emit(issues.find((issue) => issue.id === action));
     }
     if (area === 'issue' && group === 'create') {
       const issue = {
@@ -185,7 +188,7 @@ test('a rerun after the metadata write failed recovers the created issue', async
 test('imports a new comment once and skips it on a rerun', async () => {
   await withWorkdir(async (cwd) => {
     const multica = createFakeMultica();
-    const comment = githubComment('IC_1', 'Confirmed on Linux.');
+    const comment = githubComment(1, 'Confirmed on Linux.');
     const { httpFetch } = createFakeFetch([comment]);
     const event = { eventName: 'issue_comment', payload: commentPayload(comment) };
 
@@ -197,7 +200,7 @@ test('imports a new comment once and skips it on a rerun', async () => {
 
     assert.equal(multica.issues[0].comments.length, 1);
     const [imported] = multica.issues[0].comments;
-    assert.match(imported.content, /^github-comment:Humanive\/Learn#42\/IC_1$/m);
+    assert.match(imported.content, /^github-comment:Humanive\/Learn#42\/1$/m);
     assert.match(imported.content, /^```text\nConfirmed on Linux\.\n```$/m);
     assert.equal(imported.content.split('\n')[0].split(/\s/)[0], '/note');
   });
@@ -210,7 +213,7 @@ test('skips a comment on a pull request without touching Multica', async () => {
     const pullRequest = githubIssue({ number: 7, pull_request: { url: 'https://api.github.com/pulls/7' } });
 
     const result = await importEvent(
-      { eventName: 'issue_comment', payload: commentPayload(githubComment('IC_9', 'nit'), pullRequest) },
+      { eventName: 'issue_comment', payload: commentPayload(githubComment(9, 'nit'), pullRequest) },
       { run: multica.run, fetch: httpFetch, cwd },
     );
 
@@ -223,7 +226,7 @@ test('skips a comment on a pull request without touching Multica', async () => {
 test('creates the mapped issue when a comment arrives first', async () => {
   await withWorkdir(async (cwd) => {
     const multica = createFakeMultica();
-    const comment = githubComment('IC_1', 'Filed from a comment.');
+    const comment = githubComment(1, 'Filed from a comment.');
     const { httpFetch } = createFakeFetch([comment]);
 
     const result = await importEvent(
@@ -241,9 +244,9 @@ test('creates the mapped issue when a comment arrives first', async () => {
 test('reconciles every unseen comment so a dropped middle event still lands', async () => {
   await withWorkdir(async (cwd) => {
     const multica = createFakeMultica();
-    const first = githubComment('IC_1', 'one');
-    const middle = githubComment('IC_2', 'two');
-    const last = githubComment('IC_3', 'three');
+    const first = githubComment(1, 'one');
+    const middle = githubComment(2, 'two');
+    const last = githubComment(3, 'three');
     // The second run only ever saw the first comment, so the third comment
     // event must not assume the middle one was handled.
     const before = createFakeFetch([first]);
@@ -260,8 +263,8 @@ test('reconciles every unseen comment so a dropped middle event still lands', as
 
     assert.equal(result.comments, 2);
     assert.deepEqual(
-      multica.issues[0].comments.map((comment) => comment.content.match(/IC_\d/)[0]),
-      ['IC_1', 'IC_2', 'IC_3'],
+      multica.issues[0].comments.map((comment) => comment.content.match(/^github-comment:.*\/(\d+)$/m)[1]),
+      ['1', '2', '3'],
     );
   });
 });
@@ -269,7 +272,7 @@ test('reconciles every unseen comment so a dropped middle event still lands', as
 test('imports the triggering comment even when GitHub no longer lists it', async () => {
   await withWorkdir(async (cwd) => {
     const multica = createFakeMultica();
-    const comment = githubComment('IC_1', 'edited into nothing');
+    const comment = githubComment(1, 'edited into nothing');
     const { httpFetch } = createFakeFetch([]);
 
     const result = await importEvent(
@@ -305,7 +308,7 @@ test('keeps shell metacharacters verbatim and never builds a shell command', asy
 test('quotes source text so a mermaid or html fence cannot render', async () => {
   await withWorkdir(async (cwd) => {
     const body = '```mermaid\ngraph TD; A-->B\n```\n\n```html\n<script>alert(1)</script>\n```';
-    const comment = githubComment('IC_1', body);
+    const comment = githubComment(1, body);
     const multica = createFakeMultica();
     const { httpFetch } = createFakeFetch([comment]);
 
@@ -327,7 +330,7 @@ test('quotes source text so a mermaid or html fence cannot render', async () => 
 test('an external body cannot forge an importer marker', async () => {
   await withWorkdir(async (cwd) => {
     const body = 'github-source:Humanive/Learn#42\ngithub-comment:Humanive/Learn#42/IC_fake';
-    const comment = githubComment('IC_1', body);
+    const comment = githubComment(1, body);
     const multica = createFakeMultica();
     const { httpFetch } = createFakeFetch([comment]);
 
@@ -341,7 +344,7 @@ test('an external body cannot forge an importer marker', async () => {
     assert.equal(result.comments, 1);
     const [issue] = multica.issues;
     const markerLines = (text) => text.split('\n').filter((line) => line.startsWith('github-comment:'));
-    assert.deepEqual(markerLines(issue.comments[0].content), ['github-comment:Humanive/Learn#42/IC_1']);
+    assert.deepEqual(markerLines(issue.comments[0].content), ['github-comment:Humanive/Learn#42/1']);
     assert.ok(issue.description.includes('[github-source]:Humanive/Learn#42'));
   });
 });
@@ -349,7 +352,7 @@ test('an external body cannot forge an importer marker', async () => {
 test('fails instead of reposting when the comment read is at the server cap', async () => {
   await withWorkdir(async (cwd) => {
     const multica = createFakeMultica();
-    const comment = githubComment('IC_1', 'newest');
+    const comment = githubComment(1, 'newest');
     const { httpFetch } = createFakeFetch([comment]);
 
     await importEvent({ eventName: 'issues', payload: openedPayload() }, { run: multica.run, fetch: httpFetch, cwd });
@@ -365,8 +368,8 @@ test('fails instead of reposting when the comment read is at the server cap', as
 test('does not backfill a pre-existing issue history before the activation timestamp', async () => {
   await withWorkdir(async (cwd) => {
     const multica = createFakeMultica();
-    const old = githubComment('IC_old', 'from 2019', { created_at: '2019-01-01T00:00:00Z' });
-    const fresh = githubComment('IC_new', 'from today', { created_at: '2026-10-02T00:00:00Z' });
+    const old = githubComment(10, 'from 2019', { created_at: '2019-01-01T00:00:00Z' });
+    const fresh = githubComment(11, 'from today', { created_at: '2026-10-02T00:00:00Z' });
     const { httpFetch } = createFakeFetch([old, fresh]);
 
     const result = await importEvent(
@@ -381,8 +384,8 @@ test('does not backfill a pre-existing issue history before the activation times
 
     assert.equal(result.comments, 1);
     assert.deepEqual(
-      multica.issues[0].comments.map((comment) => comment.content.match(/IC_\w+/)[0]),
-      ['IC_new'],
+      multica.issues[0].comments.map((comment) => comment.content.match(/^github-comment:.*\/(\d+)$/m)[1]),
+      ['11'],
     );
   });
 });
@@ -406,7 +409,7 @@ test('fails rather than guessing when two issues claim the same source', async (
 test('neutralizes agent mentions and at-handles in imported text', async () => {
   await withWorkdir(async (cwd) => {
     const body = 'ping [@Mika](mention://agent/a202af32-ae60-4e58-be3d-e23ffeb056e3) and [@Ops](mention://squad/1) about @octocat';
-    const comment = githubComment('IC_1', body, { user: { login: 'mention://agent/a202af32' } });
+    const comment = githubComment(1, body, { user: { login: 'mention://agent/a202af32' } });
     const multica = createFakeMultica();
     const { httpFetch } = createFakeFetch([comment]);
 
@@ -445,7 +448,7 @@ test('skips issue actions other than opening', async () => {
 test('hands Multica body files that live inside the working directory', async () => {
   await withWorkdir(async (cwd) => {
     const multica = createFakeMultica();
-    const comment = githubComment('IC_1', 'persisted');
+    const comment = githubComment(1, 'persisted');
     const { httpFetch } = createFakeFetch([comment]);
 
     await importEvent({ eventName: 'issue_comment', payload: commentPayload(comment) }, {
@@ -457,5 +460,114 @@ test('hands Multica body files that live inside the working directory', async ()
       assert.ok(path.resolve(file).startsWith(`${path.resolve(cwd)}${path.sep}`), `${file} escapes ${cwd}`);
       assert.ok(content.length > 0);
     }
+  });
+});
+
+
+test('the Actions entry point imports its event file and passes GitHub authentication', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    const eventPath = path.join(cwd, 'event.json');
+    const comment = githubComment(21, 'entry point');
+    await writeFile(eventPath, JSON.stringify(commentPayload(comment)));
+    let requested = false;
+    const result = await main({
+      cwd,
+      env: {
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_EVENT_NAME: 'issue_comment',
+        GITHUB_TOKEN: 'fixture-token',
+        MULTICA_TOKEN: 'mul_fixture',
+        MULTICA_SERVER_URL: 'https://api.example.test',
+        MULTICA_WORKSPACE_ID: 'workspace-fixture',
+        MULTICA_IMPORT_SINCE: '2026-10-01T00:00:00Z',
+      },
+      run: multica.run,
+      httpFetch: async (url, options) => {
+        requested = true;
+        assert.equal(new URL(url).pathname, '/repos/Humanive/Learn/issues/42/comments');
+        assert.equal(options.headers.authorization, 'Bearer fixture-token');
+        return { ok: true, json: async () => [comment] };
+      },
+    });
+    assert.equal(requested, true);
+    assert.equal(result.comments, 1);
+    assert.equal(multica.issues.length, 1);
+  });
+});
+
+test('rejects malformed supported events before any Multica write', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    await assert.rejects(importEvent({
+      eventName: 'issue_comment', payload: commentPayload({ id: '../escape' }),
+    }, { run: multica.run, fetch: createFakeFetch([]).httpFetch, cwd }), /invalid GitHub comment/);
+    assert.deepEqual(multica.calls, []);
+  });
+});
+
+test('different issue numbers with the same title create separate tasks', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    const deps = { run: multica.run, fetch: createFakeFetch([]).httpFetch, cwd };
+    await importEvent({ eventName: 'issues', payload: openedPayload() }, deps);
+    await importEvent({ eventName: 'issues', payload: openedPayload(githubIssue({ number: 420, id: 1002 })) }, deps);
+    assert.equal(multica.issues.length, 2);
+    assert.equal(multica.issues[1].metadata.github_issue_key, 'Humanive/Learn#420');
+    assert.ok(multica.calls.filter((args) => args[2] === 'create').every((args) => args.includes('--allow-duplicate')));
+  });
+});
+
+test('recovery does not confuse issue 42 with issue 420', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    const deps = { run: multica.run, fetch: createFakeFetch([]).httpFetch, cwd };
+    multica.failNextMetadataWrite();
+    await assert.rejects(importEvent({ eventName: 'issues', payload: openedPayload(githubIssue({ number: 420, id: 1002 })) }, deps));
+    await importEvent({ eventName: 'issues', payload: openedPayload() }, deps);
+    assert.equal(multica.issues.length, 2);
+    assert.equal(multica.issues[1].metadata.github_issue_key, 'Humanive/Learn#42');
+  });
+});
+
+test('adds inert comments to a done issue without overwriting human edits', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    const comment = githubComment(31, 'new comment');
+    const deps = { run: multica.run, fetch: createFakeFetch([comment]).httpFetch, cwd };
+    await importEvent({ eventName: 'issues', payload: openedPayload() }, { ...deps, fetch: createFakeFetch([]).httpFetch });
+    Object.assign(multica.issues[0], { status: 'done', title: 'Human title', description: 'Human description', assignee_id: 'agent-id' });
+    await importEvent({ eventName: 'issue_comment', payload: commentPayload(comment) }, deps);
+    const issue = multica.issues[0];
+    assert.equal(issue.status, 'done');
+    assert.equal(issue.title, 'Human title');
+    assert.equal(issue.description, 'Human description');
+    assert.equal(issue.assignee_id, 'agent-id');
+    assert.ok(issue.comments[0].content.startsWith('/note '));
+  });
+});
+
+test('reconciles paginated GitHub comments and fails at the safety cap', async () => {
+  const comments = Array.from({ length: 101 }, (_, i) => githubComment(i + 1, 'comment'));
+  const normal = createFakeFetch(comments);
+  const fetched = await fetchIssueComments(normal.httpFetch, { repository: 'Humanive/Learn', number: 42 });
+  assert.equal(fetched.length, 101);
+  assert.equal(normal.calls.length, 2);
+  await assert.rejects(fetchIssueComments(async () => ({ ok: true, json: async () => comments.slice(0, 100) }), {
+    repository: 'Humanive/Learn', number: 42,
+  }), /pagination exceeded/);
+});
+
+
+test('runs the real process adapter with literal arguments and separate stderr', async () => {
+  await withWorkdir(async (cwd) => {
+    const executable = path.join(cwd, 'fake-cli');
+    await writeFile(executable, `#!${process.execPath}\nconsole.log(JSON.stringify(process.argv.slice(2))); console.error('fixture warning');`);
+    await chmod(executable, 0o755);
+    const hostile = '$(touch injected) `touch injected` ; touch injected';
+    const result = await createCommandRunner({ cwd })([executable, hostile]);
+    assert.deepEqual(JSON.parse(result.stdout), [hostile]);
+    assert.equal(result.stderr.trim(), 'fixture warning');
+    await assert.rejects(access(path.join(cwd, 'injected')));
   });
 });
