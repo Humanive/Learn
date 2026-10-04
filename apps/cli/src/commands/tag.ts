@@ -13,8 +13,12 @@ async function action(source: string, tagSpecs: string[], options: TagOptions, c
 
     // Extract workspace option if present
     let workspace = options.workspace;
-    const workspaceIndex = rawArgs.indexOf('-w');
-    const workspaceLongIndex = rawArgs.indexOf('--workspace');
+    // Arguments after `--` are literal resource/tag operands, even when a
+    // removal such as -w looks like the workspace option.
+    const separatorIndex = rawArgs.indexOf('--');
+    const optionArgs = separatorIndex === -1 ? rawArgs : rawArgs.slice(0, separatorIndex);
+    const workspaceIndex = optionArgs.indexOf('-w');
+    const workspaceLongIndex = optionArgs.indexOf('--workspace');
 
     if (workspaceIndex !== -1 && workspaceIndex + 1 < rawArgs.length) {
       workspace = rawArgs[workspaceIndex + 1];
@@ -23,12 +27,14 @@ async function action(source: string, tagSpecs: string[], options: TagOptions, c
     }
 
     // Filter out source, -w/--workspace and its value from raw args to get tag specs
-    const tagSpecsRaw = rawArgs.filter((arg, i, arr) => {
-      if (arg === source) return false;
-      if (arg === '-w' || arg === '--workspace') return false;
-      if (i > 0 && (arr[i - 1] === '-w' || arr[i - 1] === '--workspace')) return false;
-      return true;
-    });
+    const operands = separatorIndex === -1
+      ? rawArgs.filter((arg, i, arr) => {
+          if (arg === '-w' || arg === '--workspace') return false;
+          if (i > 0 && (arr[i - 1] === '-w' || arr[i - 1] === '--workspace')) return false;
+          return true;
+        })
+      : rawArgs.slice(separatorIndex + 1);
+    const tagSpecsRaw = operands.slice(1);
 
     if (tagSpecsRaw.length === 0) {
       throw new Error('No tag operations specified. Use +tag to add or -tag to remove');
@@ -104,7 +110,7 @@ async function action(source: string, tagSpecs: string[], options: TagOptions, c
 }
 
 export const tagCommand = new Command('tag')
-  .description('Add or remove tags on a resource')
+  .description('Add or remove tags on a resource. Use -- before literal resource/tag operands.')
   .argument('<source>', 'source identifier of the resource')
   .argument('<tags...>', 'tag operations: +tag to add, -tag to remove')
   .option('-w, --workspace <name>', 'target workspace')

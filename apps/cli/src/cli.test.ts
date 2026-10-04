@@ -384,6 +384,19 @@ describe('learn CLI', () => {
       expect(resourcesFile.resources[0].tags).toEqual(['new']);
     });
 
+    it('removes option-like tags after -- without changing the workspace operand', () => {
+      expect(run(['tag', 'https://example.com', '+w', '+-workspace', '+-']).status).toBe(0);
+      const result = run([
+        'tag', '--workspace', 'test-workspace', '--', 'https://example.com',
+        '-w', '--workspace', '--', '+reading',
+      ]);
+      expect(result.status).toBe(0);
+      const resourcesFile = JSON.parse(
+        fs.readFileSync(path.join(workspaceDir('test-workspace'), 'resources.json'), 'utf-8')
+      );
+      expect(resourcesFile.resources[0].tags).toEqual(['initial', 'reading']);
+    });
+
     it('fails when the resource does not exist', () => {
       const result = run(['tag', 'https://nonexistent.com', '+tag']);
       expect(result.status).toBe(1);

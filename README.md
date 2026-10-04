@@ -8,7 +8,7 @@ This is a TypeScript monorepo with three packages:
 
 - **`packages/core`** — shared logic: config, workspaces, resources, adapters, and ingestion
 - **`apps/cli`** — the `learn` CLI tool
-- **`apps/raycast`** — browser URL capture through the installed Learn CLI
+- **`apps/raycast`** — browser capture, workspace and resource browsing, manual addition, tags, removal, and Terminal ingestion through the installed Learn CLI
 
 Future capture interfaces (browser extension, MCP server) will live under `apps/`.
 
@@ -115,7 +115,7 @@ pnpm --filter @humanive/learn-core test
 - ✅ Ingest router with type detection
 - ✅ Deterministic adapters: Jina Reader, git clone, MarkItDown, local symlinks
 - ✅ `learn ingest` with external agent handoff and failed-resource retries
-- ✅ Raycast browser URL capture
+- ✅ Raycast browser URL capture, workspace creation, resource browsing and filtering, manual addition, tags, removal, and Terminal ingestion
 - ⏳ Raycast Store submission
 - ⏳ `learn open` command
 - ⏳ `learn search` command

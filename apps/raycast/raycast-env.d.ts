@@ -18,6 +18,12 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `save-current-browser-url` command */
   export type SaveCurrentBrowserUrl = ExtensionPreferences & {}
+  /** Preferences accessible in the `browse-resources` command */
+  export type BrowseResources = ExtensionPreferences & {}
+  /** Preferences accessible in the `add-resource` command */
+  export type AddResource = ExtensionPreferences & {}
+  /** Preferences accessible in the `create-workspace` command */
+  export type CreateWorkspace = ExtensionPreferences & {}
   /** Preferences accessible in the `choose-workspace` command */
   export type ChooseWorkspace = ExtensionPreferences & {}
 }
@@ -25,6 +31,12 @@ declare namespace Preferences {
 declare namespace Arguments {
   /** Arguments passed to the `save-current-browser-url` command */
   export type SaveCurrentBrowserUrl = {}
+  /** Arguments passed to the `browse-resources` command */
+  export type BrowseResources = {}
+  /** Arguments passed to the `add-resource` command */
+  export type AddResource = {}
+  /** Arguments passed to the `create-workspace` command */
+  export type CreateWorkspace = {}
   /** Arguments passed to the `choose-workspace` command */
   export type ChooseWorkspace = {}
 }

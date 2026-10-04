@@ -1,16 +1,16 @@
 # Raycast Store Submission
 
-The extension lives in `apps/raycast`. Its Store title is **Learn Browser Capture**. The official publish command opens a pull request against `raycast/extensions`; Raycast reviews that pull request before publishing the extension.
+The extension lives in `apps/raycast`. Its Store title is **Learn** (previously **Learn Browser Capture**). The official publish command opens a pull request against `raycast/extensions`; Raycast reviews that pull request before publishing the extension.
 
 ## Current Submission Blockers
 
-The logged-in Raycast profile was confirmed as `junjie_zhou` in ego-browser on 2026-10-03. Its profile showed zero published extensions. The manifest now uses that author, and build, 18 tests, and all Store lint checks pass.
+The logged-in Raycast profile was confirmed as `junjie_zhou` in ego-browser on 2026-10-03. Its profile showed zero published extensions. The manifest uses that author. The extension now includes browser capture, workspace creation, resource browsing and filters, manual resource addition, tag editing, removal, and Terminal ingestion. Review fixes preserve newer capture destinations, generate preference types before standalone typechecking, and refresh workspace names and destination badges after nested creation.
 
 1. Complete the remaining browser integration checks before Store submission: first capture, subsequent capture, duplicate URL, changing workspace, and selecting among active browser windows. Local Raycast command icons were visually verified on 2026-10-03, and the user confirmed the extension works; each of those individual flows has not been independently verified in this preparation.
 
 The compatible Learn CLI supports `learn list --json` and `learn add --workspace --title`. npm accepted `@humanive/learn-cli@0.1.0` and its dependency `@humanive/learn-core@0.1.0` on 2026-10-03. Install with `npm install -g @humanive/learn-cli`; both unscoped packages `learn` and `learn-cli` are unrelated projects. Newly created packages may take a few minutes to appear in registry queries. Both packages are bound to the GitHub Trusted Publisher described in [npm publishing](npm-publishing.md).
 
-Raycast Store review PR [#31878](https://github.com/raycast/extensions/pull/31878) was opened on 2026-10-03 from `junjiezhou1122:add-learn-browser-capture`. It is submitted for review, not yet merged or available in the Store.
+Raycast Store review PR [#31878](https://github.com/raycast/extensions/pull/31878) was opened on 2026-10-03 from `junjiezhou1122:add-learn-browser-capture`. It remains open for review and is not yet available in the Store. The latest source includes the review fixes through `970e31bb`; standalone validation passed with 54 tests and 2 monorepo-only tests skipped, plus build, typecheck, and lint. The local Raycast installation was updated and all five commands were verified in the launcher, with live workspace browsing loading CLI data.
 
 ## Packaging Already Prepared
 
@@ -56,11 +56,11 @@ The first command must print a JSON array; the second must include `--workspace`
 
 ## Review Considerations
 
-The extension reads browser tabs solely through `BrowserExtension.getTabs()`. It has no AppleScript implementation. Its application allowlist does not establish compatibility with every listed browser; confirm behavior with the browser integration before claiming support.
+The extension reads browser tabs solely through `BrowserExtension.getTabs()`. AppleScript is used only to launch shell-quoted ingestion commands in Terminal, which may require macOS automation permission. Its application allowlist does not establish compatibility with every listed browser; confirm behavior with the browser integration before claiming support.
 
 The official guidelines discourage separate commands solely for configuration. **Choose Learn Workspace** switches the capture destination; reviewers may ask to expose workspace switching within the capture command instead.
 
-Store screenshots are optional. If supplied, put up to six PNG files in `metadata/`, each exactly 2000×1250 pixels. Use Raycast Window Capture with **Save to Metadata**, a consistent background and theme, and sample workspace names. The official documentation recommends at least three screenshots. README images belong in `media/`.
+PR #31878 review requires Raycast-styled screenshots for view commands. `metadata/learn-raycast-1.png` contains the actual workspace picker framed at 2000×1250 pixels. Put up to six PNG files in `metadata/`, each exactly 2000×1250 pixels. Use Raycast Window Capture with **Save to Metadata**, a consistent background and theme, and sample workspace names. The official documentation recommends at least three screenshots. README images belong in `media/`.
 
 ## Submit After the Blockers Are Resolved
 
