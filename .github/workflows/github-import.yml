@@ -1,0 +1,70 @@
+name: Import GitHub issues into Multica
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+# Least privilege: the workflow reads the event payload and the GitHub comment
+# list, and writes nothing back to GitHub.
+permissions:
+  contents: read
+  issues: read
+
+# One queue per source issue. cancel-in-progress stays false so a comment event
+# is never discarded in favour of a newer one; the importer reconciles against
+# GitHub's current comment list, so ordering is not load-bearing.
+concurrency:
+  group: multica-import-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      MULTICA_CLI_VERSION: '0.6.1'
+      MULTICA_CLI_SHA256: 53ee75577a9194532c7d11b9ea65d2851374f3f674bbcb70266c9acee50e8bfc
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install the pinned Multica CLI
+        run: |
+          archive="multica-cli-${MULTICA_CLI_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLO "https://github.com/multica-ai/multica/releases/download/v${MULTICA_CLI_VERSION}/${archive}"
+          echo "${MULTICA_CLI_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" multica
+          sudo install -m 0755 multica /usr/local/bin/multica
+          multica version
+
+      - name: Check the required configuration
+        env:
+          SERVER_URL: ${{ vars.MULTICA_SERVER_URL }}
+          WORKSPACE_ID: ${{ vars.MULTICA_WORKSPACE_ID }}
+          IMPORT_SINCE: ${{ vars.MULTICA_IMPORT_SINCE }}
+        run: |
+          for name in SERVER_URL WORKSPACE_ID IMPORT_SINCE; do
+            if [ -z "${!name}" ]; then
+              echo "::error::repository variable MULTICA_${name} is not set"
+              exit 1
+            fi
+          done
+
+      - name: Check the importer
+        run: node --test scripts/github-import.test.mjs
+
+      - name: Import the event
+        env:
+          MULTICA_TOKEN: ${{ secrets.MULTICA_TOKEN }}
+          MULTICA_SERVER_URL: ${{ vars.MULTICA_SERVER_URL }}
+          MULTICA_WORKSPACE_ID: ${{ vars.MULTICA_WORKSPACE_ID }}
+          MULTICA_IMPORT_SINCE: ${{ vars.MULTICA_IMPORT_SINCE }}
+          MULTICA_PROJECT_ID: ${{ vars.MULTICA_PROJECT_ID }}
+        run: node scripts/github-import.mjs

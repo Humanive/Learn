@@ -8,6 +8,7 @@
     "test": "pnpm build && pnpm -r test",
     "build:cli": "pnpm -r --filter @humanive/learn-core --filter @humanive/learn-cli build",
     "test:release": "node --test scripts/npm-release.test.mjs && pnpm build:cli && pnpm -r --filter @humanive/learn-core --filter @humanive/learn-cli test && node scripts/npm-smoke.mjs",
+    "test:github-import": "node --test scripts/github-import.test.mjs",
     "learn": "node apps/cli/dist/cli.js"
   }
 }

@@ -3,4 +3,5 @@ dist/
 coverage/
 *.tsbuildinfo
 .npm-release/
+.github-import-*/
 .DS_Store
