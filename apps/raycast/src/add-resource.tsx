@@ -29,7 +29,7 @@ export function AddResourceForm({
 }: {
   executable: string;
   workspace?: string;
-  onAdded?: () => Promise<void>;
+  onAdded?: (workspace: string) => Promise<void>;
   onWorkspaceCreated?: () => Promise<unknown>;
 }) {
   const { push, pop } = useNavigation();
@@ -117,7 +117,7 @@ export function AddResourceForm({
       message: "Pending ingestion",
     });
     try {
-      if (onAdded) await onAdded();
+      if (onAdded) await onAdded(workspace);
       else await closeMainWindow();
     } catch (e) {
       await showToast({

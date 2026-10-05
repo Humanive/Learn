@@ -31,6 +31,10 @@ export function CreateWorkspaceForm({
   async function submit(values: { name: string }) {
     if (submitting.current) return;
     const name = values.name.trim();
+    if (name.startsWith("-")) {
+      setNameError("Workspace names cannot start with a dash");
+      return;
+    }
     if (
       !name ||
       name === "." ||

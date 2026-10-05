@@ -17,23 +17,20 @@ async function action(source: string, tagSpecs: string[], options: TagOptions, c
     // removal such as -w looks like the workspace option.
     const separatorIndex = rawArgs.indexOf('--');
     const optionArgs = separatorIndex === -1 ? rawArgs : rawArgs.slice(0, separatorIndex);
-    const workspaceIndex = optionArgs.indexOf('-w');
-    const workspaceLongIndex = optionArgs.indexOf('--workspace');
-
-    if (workspaceIndex !== -1 && workspaceIndex + 1 < rawArgs.length) {
-      workspace = rawArgs[workspaceIndex + 1];
-    } else if (workspaceLongIndex !== -1 && workspaceLongIndex + 1 < rawArgs.length) {
-      workspace = rawArgs[workspaceLongIndex + 1];
+    const operands: string[] = [];
+    for (let i = 0; i < optionArgs.length; i++) {
+      const arg = optionArgs[i];
+      if (arg === '-w' || arg === '--workspace') {
+        workspace = optionArgs[++i];
+      } else if (arg.startsWith('--workspace=')) {
+        workspace = arg.slice('--workspace='.length);
+      } else if (arg.startsWith('-w') && !arg.startsWith('--')) {
+        workspace = arg.slice(2);
+      } else {
+        operands.push(arg);
+      }
     }
-
-    // Filter out source, -w/--workspace and its value from raw args to get tag specs
-    const operands = separatorIndex === -1
-      ? rawArgs.filter((arg, i, arr) => {
-          if (arg === '-w' || arg === '--workspace') return false;
-          if (i > 0 && (arr[i - 1] === '-w' || arr[i - 1] === '--workspace')) return false;
-          return true;
-        })
-      : rawArgs.slice(separatorIndex + 1);
+    if (separatorIndex !== -1) operands.push(...rawArgs.slice(separatorIndex + 1));
     const tagSpecsRaw = operands.slice(1);
 
     if (tagSpecsRaw.length === 0) {

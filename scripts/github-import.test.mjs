@@ -31,7 +31,7 @@ function createFakeMultica({ failMetadataOnce = false } = {}) {
       return emit({ issues: issues.filter((issue) => issue.metadata.github_issue_key === key) });
     }
     if (area === 'issue' && group === 'search') {
-      return emit({ issues: issues.filter((issue) => issue.description.includes(action)) });
+      return emit({ issues: issues.filter((issue) => issue.description.includes(action)).slice(0, Math.min(50, Number(flag(args, '--limit')))) });
     }
     if (area === 'issue' && group === 'get') {
       return emit(issues.find((issue) => issue.id === action));
@@ -182,6 +182,106 @@ test('a rerun after the metadata write failed recovers the created issue', async
     assert.equal(recovered.status, 'issue metadata recovered');
     assert.equal(multica.issues.length, 1);
     assert.equal(multica.issues[0].metadata.github_issue_key, 'Humanive/Learn#42');
+  });
+});
+
+for (const count of [49, 50, 51]) {
+  test(`recovery search with ${count} candidates ${count < 50 ? 'recovers the issue' : 'fails before inspecting or writing issues'}`, async () => {
+    await withWorkdir(async (cwd) => {
+      const multica = createFakeMultica();
+      const deps = { run: multica.run, fetch: createFakeFetch([]).httpFetch, cwd };
+      multica.issues.push(...Array.from({ length: count }, (_, i) => ({
+        id: `candidate-${i}`,
+        description: i === 48 || i === 50 ? 'github-source:Humanive/Learn#42' : 'github-source:Humanive/Learn#420',
+        metadata: {},
+        comments: [],
+      })));
+      const event = { eventName: 'issues', payload: openedPayload() };
+
+      if (count < 50) {
+        const result = await importEvent(event, deps);
+        assert.equal(result.status, 'issue metadata recovered');
+        assert.equal(multica.issues.length, 49);
+        assert.deepEqual(multica.issues[48].metadata, {
+          github_issue_key: 'Humanive/Learn#42', github_issue_id: '1001',
+        });
+      } else {
+        const before = structuredClone(multica.issues);
+        await assert.rejects(importEvent(event, deps), /recovery search reached its result cap/);
+        assert.deepEqual(multica.issues, before);
+        assert.deepEqual(multica.calls.map((args) => args[2]), ['list', 'search']);
+      }
+      const search = multica.calls.find((args) => args[2] === 'search');
+      assert.equal(flag(search, '--limit'), '50');
+    });
+  });
+}
+
+test('description recovery rejects a conflicting immutable GitHub issue ID without writes', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    multica.issues.push({
+      id: 'existing',
+      description: 'github-source:Humanive/Learn#42',
+      metadata: { github_issue_id: '9999' },
+      comments: [],
+    });
+    const before = structuredClone(multica.issues);
+    await assert.rejects(importEvent({ eventName: 'issues', payload: openedPayload() }, {
+      run: multica.run, fetch: createFakeFetch([]).httpFetch, cwd,
+    }), /source issue ID differs from the existing Multica mapping/);
+    assert.deepEqual(multica.issues, before);
+    assert.deepEqual(multica.calls.map((args) => args[2]), ['list', 'search', 'get']);
+  });
+});
+
+test('imports overlapping GitHub comment pages once and skips them on a rerun', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    const comments = Array.from({ length: 101 }, (_, i) => githubComment(i + 1, `comment ${i + 1}`));
+    const { httpFetch, calls } = createFakeFetch([...comments.slice(0, 100), ...comments.slice(99)]);
+    const event = { eventName: 'issue_comment', payload: commentPayload(comments[100]) };
+    const deps = { run: multica.run, fetch: httpFetch, cwd };
+
+    const first = await importEvent(event, deps);
+    assert.equal(first.comments, 101);
+    assert.equal(calls.length, 2);
+    assert.equal(multica.issues[0].comments.length, 101);
+    assert.equal(multica.issues[0].comments.filter((comment) =>
+      comment.content.includes('\ngithub-comment:Humanive/Learn#42/100\n')).length, 1);
+
+    const second = await importEvent(event, deps);
+    assert.equal(second.comments, 0);
+    assert.equal(multica.issues[0].comments.length, 101);
+  });
+});
+
+test('a rerun after an unknown comment write result imports only the remaining comment', async () => {
+  await withWorkdir(async (cwd) => {
+    const multica = createFakeMultica();
+    const comments = [githubComment(1, 'one'), githubComment(2, 'two')];
+    const deps = { run: multica.run, fetch: createFakeFetch(comments).httpFetch, cwd };
+    const event = { eventName: 'issue_comment', payload: commentPayload(comments[1]) };
+    let failOnce = true;
+    const run = async (args) => {
+      const result = await multica.run(args);
+      if (failOnce && args[2] === 'comment' && args[3] === 'add') {
+        failOnce = false;
+        throw new Error('comment write result lost');
+      }
+      return result;
+    };
+
+    await assert.rejects(importEvent(event, { ...deps, run }), /comment write result lost/);
+    assert.equal(multica.issues[0].comments.length, 1);
+
+    const result = await importEvent(event, deps);
+    assert.equal(result.comments, 1);
+    assert.deepEqual(
+      multica.issues[0].comments.map((comment) => comment.content.match(/^github-comment:.*\/(\d+)$/m)[1]),
+      ['1', '2'],
+    );
+    assert.equal((await importEvent(event, deps)).comments, 0);
   });
 });
 

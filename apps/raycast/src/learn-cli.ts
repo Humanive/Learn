@@ -120,7 +120,11 @@ export async function updateLearnTags(
   // remove the tag "-". Use legacy-compatible operands for ordinary tags;
   // literal option-like removals need the updated CLI's separator support.
   const needsSeparator = operations.some(
-    (operation) => operation === "-w" || operation === "--workspace",
+    (operation) =>
+      operation === "--" ||
+      operation.startsWith("-w") ||
+      operation === "--workspace" ||
+      operation.startsWith("--workspace="),
   );
   if (needsSeparator) {
     const help = await runLearn(["tag", "--help"], executable);
@@ -129,7 +133,7 @@ export async function updateLearnTags(
       !help.stdout.includes("literal resource/tag operands")
     ) {
       throw new Error(
-        "Removing tags named w or -workspace requires an updated Learn CLI. Build it from the latest Learn source checkout.",
+        "Removing tags named -, starting with w, or resembling --workspace options requires an updated Learn CLI. Build it from the latest Learn source checkout.",
       );
     }
   }
@@ -164,6 +168,17 @@ export async function removeLearnResource(
   purge: boolean,
   executable = "learn",
 ): Promise<void> {
+  if (purge) {
+    const help = await runLearn(["rm", "--help"], executable);
+    if (
+      help.code !== 0 ||
+      !help.stdout.includes("workspace-contained output")
+    ) {
+      throw new Error(
+        "Deleting content requires an updated Learn CLI. Build it from the latest Learn source checkout, or remove the resource while keeping its content.",
+      );
+    }
+  }
   await checkedLearn(
     [
       "rm",

@@ -143,11 +143,11 @@ export default function BrowseResources() {
                       executable={executable}
                       workspace={workspace}
                       onWorkspaceCreated={refreshWorkspaces}
-                      onAdded={async () => {
+                      onAdded={async (destination) => {
                         pop();
                         push(
                           <WorkspaceResourceList
-                            workspace={workspace}
+                            workspace={destination}
                             executable={executable}
                             onCaptureChanged={refreshCaptureDestination}
                             onWorkspacesChanged={refreshWorkspaces}
@@ -226,7 +226,21 @@ export function WorkspaceResourceList({
         executable={executable}
         workspace={workspace}
         onWorkspaceCreated={onWorkspacesChanged || onCaptureChanged}
-        onAdded={refreshAndPop}
+        onAdded={async (destination) => {
+          if (destination === workspace) {
+            await refreshAndPop();
+          } else {
+            pop();
+            push(
+              <WorkspaceResourceList
+                workspace={destination}
+                executable={executable}
+                onCaptureChanged={onCaptureChanged}
+                onWorkspacesChanged={onWorkspacesChanged}
+              />,
+            );
+          }
+        }}
       />,
     );
   }

@@ -89,6 +89,39 @@ describe.skipIf(!fs.existsSync(cli))(
       ).toEqual([]);
       expect(fs.existsSync(output)).toBe(true);
     });
+    it("clears a literal dash tag with the real CLI", async () => {
+      const dashWorkspace = "dash tags";
+      await createLearnWorkspace(dashWorkspace, executable);
+      await addLearnResource(dashWorkspace, source, "", ["-"], executable);
+      const data = await listLearnResources(dashWorkspace, executable);
+      expect(data.resources[0].tags).toEqual(["-"]);
+      await updateLearnTags(dashWorkspace, data.resources[0], [], executable);
+      expect(
+        (await listLearnResources(dashWorkspace, executable)).resources[0].tags,
+      ).toEqual([]);
+    });
+    it("clears tags that resemble attached workspace options with the real CLI", async () => {
+      const attachedWorkspace = "attached tag names";
+      await createLearnWorkspace(attachedWorkspace, executable);
+      await addLearnResource(
+        attachedWorkspace,
+        source,
+        "",
+        ["work", "-workspace=other"],
+        executable,
+      );
+      const data = await listLearnResources(attachedWorkspace, executable);
+      await updateLearnTags(
+        attachedWorkspace,
+        data.resources[0],
+        [],
+        executable,
+      );
+      expect(
+        (await listLearnResources(attachedWorkspace, executable)).resources[0]
+          .tags,
+      ).toEqual([]);
+    });
     it("purges generated content and reports duplicates and missing workspaces", async () => {
       await addLearnResource(workspace, source, "", [], executable);
       await expect(
@@ -111,6 +144,39 @@ describe.skipIf(!fs.existsSync(cli))(
     });
   },
 );
+
+describe("CLI purge compatibility", () => {
+  it("refuses purge on an older CLI before any removal but still permits keeping content", async () => {
+    const oldCli = path.join(testDir, "old cli");
+    const calls = path.join(testDir, "old-cli-calls.jsonl");
+    fs.writeFileSync(
+      oldCli,
+      `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');if(args.includes('--help'))console.log('Remove a resource from the workspace');\n`,
+      { mode: 0o755 },
+    );
+    await expect(
+      removeLearnResource(workspace, source, true, oldCli),
+    ).rejects.toThrow("updated Learn CLI");
+    expect(
+      fs
+        .readFileSync(calls, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toEqual([["rm", "--help"]]);
+    await removeLearnResource(workspace, source, false, oldCli);
+    expect(
+      fs
+        .readFileSync(calls, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      ["rm", "--help"],
+      ["rm", "--workspace", workspace, "--", source],
+    ]);
+  });
+});
 
 describe("Terminal ingestion", () => {
   it("passes quoted operands literally to a shell", () => {

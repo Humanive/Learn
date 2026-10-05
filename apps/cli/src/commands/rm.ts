@@ -43,12 +43,30 @@ async function action(source: string, options: RmOptions): Promise<void> {
       }
     }
 
-    const outputPath = ResourcesManager.removeResource(workspacePath, source);
+    const resource = ResourcesManager.load(workspacePath).resources.find((entry) => entry.source === source);
+    if (!resource) throw new Error(`Resource "${source}" not found`);
+    const outputPath = resource.output;
 
     if (options.purge && outputPath) {
-      const fullOutputPath = path.join(workspacePath, outputPath);
-      if (fs.existsSync(fullOutputPath)) {
-        const stats = fs.statSync(fullOutputPath);
+      const fullOutputPath = path.resolve(workspacePath, outputPath);
+      const relativeOutput = path.relative(path.resolve(workspacePath), fullOutputPath);
+      if (!relativeOutput || relativeOutput === '..' || relativeOutput.startsWith(`..${path.sep}`) || path.isAbsolute(relativeOutput)) {
+        throw new Error('Refusing to delete output outside the workspace or the workspace itself');
+      }
+      let parent = path.dirname(fullOutputPath);
+      while (!fs.existsSync(parent)) parent = path.dirname(parent);
+      const realParent = fs.realpathSync(parent);
+      const relativeParent = path.relative(fs.realpathSync(workspacePath), realParent);
+      if (relativeParent === '..' || relativeParent.startsWith(`..${path.sep}`) || path.isAbsolute(relativeParent)) {
+        throw new Error('Refusing to delete output outside the workspace through a symlink');
+      }
+      let stats: fs.Stats | undefined;
+      try {
+        stats = fs.lstatSync(fullOutputPath);
+      } catch (error) {
+        if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
+      }
+      if (stats) {
         if (stats.isDirectory()) {
           fs.rmSync(fullOutputPath, { recursive: true, force: true });
           console.log(chalk.gray(`Deleted directory: ${chalk.cyan(outputPath)}`));
@@ -60,6 +78,7 @@ async function action(source: string, options: RmOptions): Promise<void> {
         console.log(chalk.yellow(`Output not found: ${outputPath}`));
       }
     }
+    ResourcesManager.removeResource(workspacePath, source);
 
     console.log(chalk.green(`✓ Resource removed: ${source}`));
     if (outputPath && !options.purge) {
@@ -78,5 +97,5 @@ export const rmCommand = new Command('rm')
   .description('Remove a resource from the workspace')
   .argument('<source>', 'source identifier of the resource to remove')
   .option('-w, --workspace <name>', 'target workspace')
-  .option('-p, --purge', 'also delete the output file/folder')
+  .option('-p, --purge', 'also delete workspace-contained output (rejects escaped paths)')
   .action(action);

@@ -38,6 +38,9 @@ export class WorkspaceManager {
    * Create a new learning workspace
    */
   async create(name: string): Promise<string> {
+    if (name.startsWith('-')) {
+      throw new Error('Workspace names cannot start with "-" because it is parsed as a CLI option');
+    }
     if ((RESERVED_WORKSPACE_NAMES as readonly string[]).includes(name)) {
       throw new Error(
         `Workspace name "${name}" is reserved because it is a top-level command. ` +

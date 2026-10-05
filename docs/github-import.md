@@ -62,7 +62,7 @@ comment it has not seen, so a dropped middle event still lands.
 
 An issue with 2000 or more Multica root comments fails the run. GitHub reads
 fail after 100 full pages rather than silently dropping later comments.
-Recovery search fails when it reaches 100 results. These limits stop the import
+Recovery search fails when it reaches 50 results. These limits stop the import
 before an incomplete read can cause duplicates. Resolve the limit before rerunning.
 The triggering event comment is retained even if it predates `MULTICA_IMPORT_SINCE`
 or was deleted from GitHub. Reconciliation only covers comments after that

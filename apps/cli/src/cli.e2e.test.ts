@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
+import { stripVTControlCharacters } from 'node:util';
 
 describe('CLI End-to-End: Integration Tests', () => {
   let testHome: string;
@@ -70,7 +71,7 @@ describe('CLI End-to-End: Integration Tests', () => {
       );
 
       expect(addOutput).toContain('Resource added');
-      expect(addOutput).toContain(`Detected type: ${resource.type}`);
+      expect(stripVTControlCharacters(addOutput)).toContain(`Detected type: ${resource.type}`);
     }
 
     // Step 3: Verify resources.json state
@@ -380,8 +381,8 @@ describe('CLI End-to-End: Integration Tests', () => {
     );
 
     expect(tagOutput1).toContain('Tags updated');
-    expect(tagOutput1).toContain('Added: javascript');
-    expect(tagOutput1).toContain('Removed: beginner');
+    expect(stripVTControlCharacters(tagOutput1)).toContain('Added: javascript');
+    expect(stripVTControlCharacters(tagOutput1)).toContain('Removed: beginner');
 
     // Verify tag changes
     let resourcesData = JSON.parse(
@@ -404,7 +405,7 @@ describe('CLI End-to-End: Integration Tests', () => {
     );
 
     expect(tagOutput2).toContain('Tags updated');
-    expect(tagOutput2).toContain('Added: javascript');
+    expect(stripVTControlCharacters(tagOutput2)).toContain('Added: javascript');
 
     resourcesData = JSON.parse(
       fs.readFileSync(path.join(workspacePath, 'resources.json'), 'utf-8')
@@ -772,7 +773,7 @@ describe('CLI End-to-End: Integration Tests', () => {
       }
     );
     expect(addPdfOutput).toContain('Resource added');
-    expect(addPdfOutput).toContain('Detected type: pdf');
+    expect(stripVTControlCharacters(addPdfOutput)).toContain('Detected type: pdf');
 
     // Add local folder
     const addFolderOutput = execSync(
@@ -783,7 +784,7 @@ describe('CLI End-to-End: Integration Tests', () => {
       }
     );
     expect(addFolderOutput).toContain('Resource added');
-    expect(addFolderOutput).toContain('Detected type: local');
+    expect(stripVTControlCharacters(addFolderOutput)).toContain('Detected type: local');
 
     // Verify resources were added correctly
     const resourcesData = JSON.parse(

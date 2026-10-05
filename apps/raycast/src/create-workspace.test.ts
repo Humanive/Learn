@@ -87,6 +87,18 @@ describe("Create Learn Workspace", () => {
     expect(mocks.closeMainWindow).toHaveBeenCalledOnce();
   });
 
+  it.each(["-", "-topic", " --workspace "])(
+    "rejects a leading-dash name %j before CLI or storage calls",
+    async (name) => {
+      const onCreated = vi.fn();
+      await submitter(onCreated)({ name });
+      expect(mocks.createLearnWorkspace).not.toHaveBeenCalled();
+      expect(mocks.setItem).not.toHaveBeenCalled();
+      expect(onCreated).not.toHaveBeenCalled();
+      expect(mocks.closeMainWindow).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["", " ", ".", "..", "../papers", "a/b", "a\\b"])(
     "rejects an invalid name %j before invoking the CLI",
     async (name) => {

@@ -19,6 +19,7 @@ const MARKER_PREFIX = /\b(git(hub)?-(source|comment)):/g;
 
 const GITHUB_PAGE_SIZE = 100;
 const GITHUB_MAX_PAGES = 100;
+const RECOVERY_SEARCH_CAP = 50;
 // The server caps a root comment read at 2000 rows and the pinned CLI does not
 // surface the truncation header, so a full page is treated as a read that may
 // have dropped the oldest markers.
@@ -187,10 +188,10 @@ async function findByMetadata(run, key) {
 async function findByDescriptionMarker(run, key) {
   const marker = issueMarker(key);
   const result = await multicaJson(run, [
-    'issue', 'search', marker, '--include-closed', '--limit', '100',
+    'issue', 'search', marker, '--include-closed', '--limit', String(RECOVERY_SEARCH_CAP),
   ]);
   if (!Array.isArray(result?.issues)) throw new Error('invalid Multica search response');
-  if (result.issues.length >= 100) throw new Error('Multica recovery search reached its result cap');
+  if (result.issues.length >= RECOVERY_SEARCH_CAP) throw new Error('Multica recovery search reached its result cap');
   const matches = [];
   for (const candidate of result.issues) {
     const issue = await multicaJson(run, ['issue', 'get', candidate.id]);
@@ -250,6 +251,9 @@ async function resolveIssue(run, workDir, project, repository, source) {
 
   const existing = await findByDescriptionMarker(run, key);
   if (existing) {
+    if (existing.metadata?.github_issue_id !== undefined && String(existing.metadata.github_issue_id) !== String(source.id)) {
+      throw new Error('source issue ID differs from the existing Multica mapping');
+    }
     await setMetadata(run, existing.id, key, source.id);
     return { key, issue: existing, created: false, recovered: true };
   }
@@ -324,7 +328,8 @@ export async function importEvent({ payload, eventName }, deps) {
       await fetchIssueComments(httpFetch, { ...github, repository, number: event.issue.number }),
       event.comment,
     );
-    const missing = source.filter((comment) => !imported.has(commentMarker(resolved.key, comment.id)));
+    const unique = new Map(source.map((comment) => [comment.id, comment]));
+    const missing = [...unique.values()].filter((comment) => !imported.has(commentMarker(resolved.key, comment.id)));
     const target = { id: resolved.issue.id, key: resolved.key, sourceIssueId: event.issue.id };
     for (const comment of missing) {
       await addComment(run, workDir, target, comment);

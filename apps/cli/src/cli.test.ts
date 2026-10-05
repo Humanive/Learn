@@ -57,6 +57,13 @@ describe('learn CLI', () => {
     });
   });
 
+  it('rejects leading-dash workspace names before creating files', () => {
+    const result = run(['new', '--', '-papers']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('cannot start with');
+    expect(fs.existsSync(workspaceDir('-papers'))).toBe(false);
+  });
+
   describe('add', () => {
     it('fails when no workspace exists', () => {
       const result = run(['add', 'https://example.com']);
@@ -332,6 +339,46 @@ describe('learn CLI', () => {
       expect(fs.existsSync(outputDir)).toBe(false);
     });
 
+    it.each(['../outside/article.md', '.', 'web/article.md'])('refuses unsafe purge %s without removing the resource', (output) => {
+      const workspace = workspaceDir('test-workspace');
+      const outside = path.join(home, 'Learn', 'outside');
+      fs.mkdirSync(outside);
+      const victim = path.join(outside, 'article.md');
+      fs.writeFileSync(victim, 'Keep external content');
+      if (output === 'web/article.md') {
+        fs.rmdirSync(path.join(workspace, 'web'));
+        fs.symlinkSync(outside, path.join(workspace, 'web'));
+      }
+      const resourcesPath = path.join(workspace, 'resources.json');
+      const resources = JSON.parse(fs.readFileSync(resourcesPath, 'utf8'));
+      resources.resources[0].output = output;
+      fs.writeFileSync(resourcesPath, JSON.stringify(resources));
+      const before = fs.readFileSync(resourcesPath, 'utf8');
+
+      const result = run(['rm', 'https://example.com', '--purge']);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('outside');
+      expect(fs.readFileSync(victim, 'utf8')).toBe('Keep external content');
+      expect(fs.readFileSync(resourcesPath, 'utf8')).toBe(before);
+    });
+
+    it('purges a local output symlink without deleting its external target', () => {
+      const workspace = workspaceDir('test-workspace');
+      const victim = path.join(home, 'external.md');
+      fs.writeFileSync(victim, 'Keep source');
+      const link = path.join(workspace, 'local', 'source.md');
+      fs.symlinkSync(victim, link);
+      const resourcesPath = path.join(workspace, 'resources.json');
+      const resources = JSON.parse(fs.readFileSync(resourcesPath, 'utf8'));
+      resources.resources[0].output = 'local/source.md';
+      fs.writeFileSync(resourcesPath, JSON.stringify(resources));
+
+      expect(run(['rm', 'https://example.com', '--purge']).status).toBe(0);
+      expect(fs.existsSync(link)).toBe(false);
+      expect(fs.readFileSync(victim, 'utf8')).toBe('Keep source');
+    });
+
     it('requires --workspace when multiple workspaces exist', () => {
       run(['new', 'workspace2']);
       const result = run(['rm', 'https://example.com']);
@@ -382,6 +429,24 @@ describe('learn CLI', () => {
         fs.readFileSync(path.join(workspaceDir('test-workspace'), 'resources.json'), 'utf-8')
       );
       expect(resourcesFile.resources[0].tags).toEqual(['new']);
+    });
+
+    it('keeps every tag operand when the source is before the separator', () => {
+      expect(run(['tag', 'https://example.com', '+w', '+-workspace']).status).toBe(0);
+      const result = run([
+        'tag', 'https://example.com', '-w', 'test-workspace', '--', '-w', '--workspace', '+reading',
+      ]);
+      expect(result.status).toBe(0);
+      const resources = JSON.parse(fs.readFileSync(path.join(workspaceDir('test-workspace'), 'resources.json'), 'utf8'));
+      expect(resources.resources[0].tags).toEqual(['initial', 'reading']);
+    });
+
+    it.each(['--workspace=test-workspace', '-wtest-workspace'])('accepts attached workspace option %s before literal operands', (option) => {
+      run(['new', 'other-workspace']);
+      const result = run(['tag', option, '--', 'https://example.com', '+reading']);
+      expect(result.status).toBe(0);
+      const resources = JSON.parse(fs.readFileSync(path.join(workspaceDir('test-workspace'), 'resources.json'), 'utf8'));
+      expect(resources.resources[0].tags).toEqual(['initial', 'reading']);
     });
 
     it('removes option-like tags after -- without changing the workspace operand', () => {

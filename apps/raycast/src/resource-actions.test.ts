@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   setItem: vi.fn(),
   closeMainWindow: vi.fn(),
+  useState: vi.fn(),
 }));
 vi.mock("@raycast/api", () => {
   const component = (name: string) =>
@@ -63,7 +64,7 @@ vi.mock("@raycast/api", () => {
 vi.mock("@raycast/utils", () => ({ usePromise: mocks.usePromise }));
 vi.mock("react", () => ({
   useRef: (value: unknown) => ({ current: value }),
-  useState: (value: unknown) => [value, vi.fn()],
+  useState: mocks.useState,
   useEffect: vi.fn(),
 }));
 vi.mock("./learn-cli.js", () => ({
@@ -88,7 +89,12 @@ type Element = {
     onSubmit?: (values: Record<string, string>) => Promise<void>;
     onCreated?: (workspace: string) => Promise<void>;
     onCaptureChanged?: () => Promise<void>;
-    onWorkspaceCreated?: () => Promise<void>;
+    onWorkspaceCreated?: () => Promise<unknown>;
+    executable?: string;
+    workspace?: string;
+    onAdded?: (workspace: string) => Promise<void>;
+    onWorkspacesChanged?: () => Promise<unknown>;
+    onChange?: (value: string) => void;
   };
 };
 function action(root: unknown, title: string): Element {
@@ -113,6 +119,7 @@ const resource = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.useState.mockImplementation((value: unknown) => [value, vi.fn()]);
   mocks.usePromise.mockReturnValue({
     data: {
       path: "/custom/workspace",
@@ -225,6 +232,135 @@ describe("capture destination badge refresh", () => {
   });
 });
 
+describe("navigation after adding a resource", () => {
+  function addForm(props: Parameters<typeof AddResourceForm>[0]) {
+    const state: unknown[] = [];
+    let nextState = 0;
+    mocks.useState.mockImplementation((initial: unknown) => {
+      const index = nextState++;
+      if (!(index in state)) state[index] = initial;
+      return [state[index], (value: unknown) => (state[index] = value)];
+    });
+    return () => {
+      nextState = 0;
+      return AddResourceForm(props);
+    };
+  }
+
+  it.each([
+    { entry: "workspace picker", create: false },
+    { entry: "workspace picker", create: true },
+    { entry: "resource list", create: false },
+    { entry: "resource list", create: true },
+  ])(
+    "opens the saved destination from $entry when create=$create",
+    async ({ entry, create }) => {
+      const refreshCapture = vi.fn().mockResolvedValue(undefined);
+      const refreshWorkspaces = vi.fn().mockResolvedValue(undefined);
+      const view =
+        entry === "workspace picker"
+          ? (() => {
+              mocks.usePromise
+                .mockReturnValueOnce({
+                  data: ["papers"],
+                  revalidate: mocks.revalidate,
+                })
+                .mockReturnValueOnce({
+                  data: "papers",
+                  revalidate: refreshCapture,
+                });
+              return BrowseResources();
+            })()
+          : WorkspaceResourceList({
+              workspace: "papers",
+              executable: "learn",
+              onCaptureChanged: refreshCapture,
+              onWorkspacesChanged: refreshWorkspaces,
+            });
+      await action(view, "Add Resource").props.onAction!();
+      const pushed = mocks.push.mock.calls[0][0] as Element;
+      mocks.usePromise.mockReturnValue({
+        data: create ? ["papers"] : ["papers", "notes"],
+        revalidate: mocks.revalidate,
+      });
+      const render = addForm({
+        workspace: pushed.props.workspace,
+        executable: "learn",
+        onAdded: pushed.props.onAdded,
+        onWorkspaceCreated: pushed.props.onWorkspaceCreated,
+      });
+      let form = render();
+      if (create) {
+        await action(form, "Create Workspace").props.onAction!();
+        const creation = mocks.push.mock.calls[1][0] as Element;
+        mocks.usePromise.mockReturnValue({
+          data: ["papers", "notes"],
+          revalidate: mocks.revalidate,
+        });
+        await creation.props.onCreated!("notes");
+      } else {
+        action(form, "Workspace").props.onChange!("notes");
+      }
+      form = render();
+      mocks.push.mockClear();
+      mocks.pop.mockClear();
+      mocks.revalidate.mockClear();
+      await action(form, "Add Resource").props.onSubmit!({
+        source: resource.source,
+        title: "",
+        tags: "",
+      });
+      expect(mocks.addLearnResource).toHaveBeenCalledWith(
+        "notes",
+        resource.source,
+        "",
+        [],
+        "learn",
+      );
+      expect(mocks.pop).toHaveBeenCalledOnce();
+      expect(mocks.push).toHaveBeenCalledOnce();
+      expect(mocks.pop.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.push.mock.invocationCallOrder[0],
+      );
+      const destination = mocks.push.mock.calls[0][0] as Element;
+      expect(destination.props.workspace).toBe("notes");
+      expect(destination.props.onCaptureChanged).toBe(refreshCapture);
+      expect(destination.props.onWorkspacesChanged).toBe(
+        entry === "resource list"
+          ? refreshWorkspaces
+          : pushed.props.onWorkspaceCreated,
+      );
+      expect(mocks.revalidate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reloads and returns to the same workspace list", async () => {
+    await action(list(), "Add Resource").props.onAction!();
+    const pushed = mocks.push.mock.calls[0][0] as Element;
+    mocks.usePromise.mockReturnValue({
+      data: ["papers"],
+      revalidate: mocks.revalidate,
+    });
+    const form = AddResourceForm({
+      workspace: pushed.props.workspace,
+      executable: "/bin/learn",
+      onAdded: pushed.props.onAdded,
+    });
+    mocks.push.mockClear();
+    await action(form, "Add Resource").props.onSubmit!({
+      source: resource.source,
+      title: "",
+      tags: "",
+    });
+    expect(mocks.revalidate).toHaveBeenCalledOnce();
+    expect(mocks.pop).toHaveBeenCalledOnce();
+    expect(mocks.revalidate.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.pop.mock.invocationCallOrder[0],
+    );
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
 describe("resource actions", () => {
   it("does not mutate when removal is cancelled", async () => {
     mocks.confirmAlert.mockResolvedValue(false);
@@ -295,6 +431,7 @@ describe("resource actions", () => {
       "/bin/learn",
     );
     expect(onAdded).toHaveBeenCalledOnce();
+    expect(onAdded).toHaveBeenCalledWith("papers");
     expect(mocks.startIngestion).not.toHaveBeenCalled();
   });
   it("keeps the add form open on CLI failure", async () => {

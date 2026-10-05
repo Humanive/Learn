@@ -8,7 +8,7 @@ Saving adds a pending resource. Start ingestion separately from the resource lis
 
 - macOS and Raycast.
 - A browser connected to the [Raycast Browser Extension](https://www.raycast.com/browser-extension).
-- A compatible Learn CLI that supports `new`, `list --json`, `<workspace> ls --json`, `add`, `tag`, `rm`, and `ingest`. Ordinary tag editing works with published 0.1.0. Removing tags named `w` or `-workspace` requires the latest CLI's literal operand support; the extension checks compatibility before attempting those changes.
+- A compatible Learn CLI that supports `new`, `list --json`, `<workspace> ls --json`, `add`, `tag`, `rm`, and `ingest`. Ordinary tag editing works with published 0.1.0. Removing tags named `-`, starting with `w`, or resembling `--workspace` options requires the latest CLI's literal operand support. Deleting content requires a CLI with workspace containment checks. The extension checks these capabilities before attempting those changes.
 
 ## Set Up the Learn CLI
 
@@ -97,7 +97,7 @@ Choose the workspace that later captures will use. Use **Create Workspace** (`‚å
 
 ### Create Learn Workspace
 
-Enter a workspace name to create it through the Learn CLI. The extension selects the new workspace for future browser captures. Existing or reserved names are reported by the CLI; names cannot contain path separators.
+Enter a workspace name to create it through the Learn CLI. The extension selects the new workspace for future browser captures. Existing or reserved names are reported by the CLI; names cannot start with a dash or contain path separators.
 
 ## Troubleshooting
 
